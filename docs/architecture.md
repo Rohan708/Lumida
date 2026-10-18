@@ -20,7 +20,7 @@ Customer DBs (Postgres, MySQL, MSSQL, Snowflake, …) — read-only
         └───────────────┴──► Finding table ◄─────────┘
                                   │
                                   ▼
-                     alerting · docs generation · API (4.2) · web UI (4.4)
+                     alerting · docs generation · API (4.2) · web app (4.4)
 ```
 
 ## Layers
@@ -38,6 +38,7 @@ Customer DBs (Postgres, MySQL, MSSQL, Snowflake, …) — read-only
 | `reconcile` | Source-vs-copy comparison from both sides' scans — see [design](design/stage3_databases.md) | 3 | No |
 | `pipeline` | `lumida run`: scan → discover → rules → rows → semantic → dbhealth → detect → reconcile → health → alert | 1.6 | No |
 | `api` | HTTP API under `/api/v1` (FastAPI): findings, rules, relationships, questions, health. Same functions as the CLI; personal logins and roles (4.3). See [design](design/api.md) | 4.2 | No |
+| `web` | The web app: plain HTML/CSS/JS served by the API at `/`, cookie login, strict CSP — see [design](design/web_app.md) | 4.4 | No |
 | `accounts` | People, roles, logins (scrypt), API keys, audit log, `lumida user` — see [design](design/accounts.md) | 4.3 | No |
 | `service` | `lumida serve`: daily schedule per source, lock, failure alerts, `/healthz`, migrations on start; packaged by `Dockerfile` + `deploy/` — see [design](design/self_hosted.md) | 4.1 | No |
 | `rules` | Safe rule format, storage + human review, nightly checks compiled to read-only SQL — see [design](design/ai_rules.md) | 2 | No |

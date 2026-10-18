@@ -3,17 +3,20 @@
 - **Personal logins** (Stage 4.3): ``POST /api/v1/auth/login`` with email + password
   returns a token; every other request sends it as ``Authorization: Bearer <token>``.
   Scripts use personal API keys (``/api/v1/auth/keys``). Roles: viewer, reviewer, admin.
+- The web app (Stage 4.4) is served from the same address: ``/`` (files in ``lumida/web``).
 - Runs inside ``lumida serve`` (one container), or alone with ``lumida api``.
 - Interactive docs at ``/api/docs``, the machine-readable description at ``/api/openapi.json``.
 """
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from sqlalchemy import Engine
 
@@ -36,6 +39,13 @@ NOT_FOUND = (SourceNotFoundError, NotFoundError, AccountNotFoundError)
 CONFLICT = (InvalidTransitionError, InvalidRuleError, AnswerError, ContextError, AccountError)
 INVALID = (WeakPasswordError,)
 
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+WEB_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
 
 def create_app(engine: Engine, policy: AuthPolicy | None = None) -> FastAPI:
     app = FastAPI(
@@ -49,6 +59,9 @@ def create_app(engine: Engine, policy: AuthPolicy | None = None) -> FastAPI:
     app.state.policy = policy or AuthPolicy()
     app.include_router(account_routes.router)
     app.include_router(routes.router)
+    app.middleware("http")(_security_headers)
+    # Last: everything that isn't the API is the web app's own files.
+    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     for errors, code in ((NOT_FOUND, 404), (CONFLICT, 409), (INVALID, 422)):
         for error in errors:
@@ -59,6 +72,20 @@ def create_app(engine: Engine, policy: AuthPolicy | None = None) -> FastAPI:
         return JSONResponse({"detail": _validation(exc)}, status_code=422)  # e.g. a rule spec
 
     return app
+
+
+async def _security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if not request.url.path.startswith("/api/"):
+        # The web app runs only its own files: no inline scripts, nothing from elsewhere,
+        # never inside another site's frame.
+        response.headers.setdefault("Content-Security-Policy", WEB_CSP)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
 
 
 def _reply(code: int) -> Callable[[Request, Exception], JSONResponse]:

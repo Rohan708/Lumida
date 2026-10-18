@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from lumida.accounts.store import (
     AccountError,
@@ -22,7 +22,7 @@ from lumida.accounts.store import (
     set_password,
     set_role,
 )
-from lumida.api.auth import DB, Admin, Viewer
+from lumida.api.auth import DB, SESSION_COOKIE, Admin, Viewer, set_session_cookie
 from lumida.api.schemas import (
     ApiKeyOut,
     AuditOut,
@@ -59,8 +59,9 @@ def _key_out(k: AuthToken) -> ApiKeyOut:
 
 
 @router.post("/auth/login")
-def log_in(body: Login, session: DB, request: Request) -> LoginOut:
-    """The one endpoint that needs no token."""
+def log_in(body: Login, session: DB, request: Request, response: Response) -> LoginOut:
+    """The one endpoint that needs no token. Scripts get the token in the answer; the web
+    app asks for it in an HttpOnly cookie (``cookie: true``) that page scripts can't read."""
     try:
         token, row, user = login(session, body.email, body.password, request.app.state.policy)
     except LoginFailedError:
@@ -68,13 +69,17 @@ def log_in(body: Login, session: DB, request: Request) -> LoginOut:
         raise HTTPException(401, LOGIN_FAILED) from None
     session.commit()
     expires = row.expires_at or utcnow()  # sessions always have one
+    if body.cookie:
+        set_session_cookie(response, request, token, expires)
+        return LoginOut(token=None, expires_at=expires, user=user_out(user))
     return LoginOut(token=token, expires_at=expires, user=user_out(user))
 
 
 @router.post("/auth/logout", status_code=204)
-def log_out(session: DB, me: Viewer) -> None:
+def log_out(session: DB, me: Viewer, response: Response) -> None:
     logout(session, me)
     session.commit()
+    response.delete_cookie(SESSION_COOKIE, path="/")
 
 
 @router.get("/auth/me")

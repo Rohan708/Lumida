@@ -173,6 +173,10 @@ RoleName = Literal["viewer", "reviewer", "admin"]
 class Login(BaseModel):
     email: str = Field(min_length=1, max_length=320)
     password: str = Password
+    cookie: bool = Field(
+        default=False,
+        description="the web app: keep the session in an HttpOnly cookie instead of returning it",
+    )
 
 
 class UserOut(BaseModel):
@@ -188,7 +192,8 @@ class UserOut(BaseModel):
 
 
 class LoginOut(BaseModel):
-    token: str = Field(description='send as "Authorization: Bearer <token>"')
+    token: str | None = Field(description='send as "Authorization: Bearer <token>"; None '
+                              "when it went into the cookie")  # fmt: skip
     expires_at: datetime
     user: UserOut
 

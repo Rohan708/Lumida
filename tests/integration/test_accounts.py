@@ -252,3 +252,47 @@ def test_the_first_admin_from_the_command_line(
         user = session.scalars(select(User).where(User.email == "first@shop.example")).one()
         assert (user.role, user.created_by.startswith("cli:")) == (Role.REVIEWER, True)
         assert session.scalar(select(User).where(User.email == "weak@shop.example")) is None
+
+
+# --- the web app (Stage 4.4) -----------------------------------------------------------------
+
+
+def test_the_web_app_logs_in_with_a_cookie(client: TestClient) -> None:
+    body = {"email": REVIEWER, "password": PASSWORD, "cookie": True}
+    reply = client.post("/api/v1/auth/login", json=body)
+    assert reply.status_code == 200
+    assert reply.json()["token"] is None  # it went into the cookie, out of the page's reach
+    cookie = reply.headers["set-cookie"].lower()
+    assert "lumida_session=lmd_" in cookie
+    assert "httponly" in cookie
+    assert "samesite=strict" in cookie
+    assert client.get("/api/v1/auth/me").json()["email"] == REVIEWER  # the browser sends it
+
+    (finding,) = client.get("/api/v1/sources/shop/findings", params={"status": "all"}).json()[
+        "items"
+    ]
+    review = f"/api/v1/findings/{finding['id']}/review"
+    forged = client.post(review, json={"action": "reopen"})  # what another site could send
+    assert forged.status_code == 403
+    assert "X-Lumida-CSRF" in forged.json()["detail"]
+    allowed = client.post(review, json={"action": "reopen"}, headers={"X-Lumida-CSRF": "1"})
+    assert allowed.status_code in (200, 409)  # past the check; 409 = not allowed from its status
+
+    out = client.post("/api/v1/auth/logout", headers={"X-Lumida-CSRF": "1"})
+    assert out.status_code == 204
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_the_web_app_is_served_with_a_strict_policy(client: TestClient) -> None:
+    page = client.get("/")
+    assert page.status_code == 200
+    assert '<script type="module" src="app.js">' in page.text
+    assert "<script>" not in page.text  # no inline scripts (the policy would block them)
+    policy = page.headers["content-security-policy"]
+    assert "script-src 'self'" in policy
+    assert "frame-ancestors 'none'" in policy
+    assert page.headers["x-frame-options"] == "DENY"
+    for asset in ("app.js", "app.css", "mark.svg", "favicon.svg"):
+        assert client.get(f"/{asset}").status_code == 200, asset
+    assert client.get("/api/docs").status_code == 200  # the API docs keep their own policy
+    assert "content-security-policy" not in client.get("/api/docs").headers

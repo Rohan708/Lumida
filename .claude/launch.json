@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "website"],
       "port": 8765
+    },
+    {
+      "name": "lumida-web-app",
+      "runtimeExecutable": "C:/Users/chauh/miniconda3/envs/py312/python.exe",
+      "runtimeArgs": ["-m", "lumida", "api", "--port", "8000"],
+      "port": 8000
     }
   ]
 }

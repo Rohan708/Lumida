@@ -55,12 +55,12 @@ docker compose exec lumida lumida source alerts shop --webhook-ref SLACK_DATA_AL
 
 The health endpoint answers **200** while the scheduler is alive, with each database's last and next run. A database that fails doesn't make the service unhealthy; that's alerted instead. To reach `/healthz` from a monitoring tool, set `LUMIDA_HEALTH_HOST=0.0.0.0` and publish port 8080.
 
-## 6. People, logins and the API
+## 6. People, the web app and the API
 Lumida has an HTTP API (the web app will use it, and so can your scripts). People log in as themselves. Create the **first admin** in the container; the password goes in at a hidden prompt:
 ```bash
 docker compose exec -it lumida lumida user add you@company.com --role admin
 ```
-Then open **http://127.0.0.1:8000/api/docs**, log in with `POST /auth/login`, click *Authorize* and paste the token. Admins add colleagues with `POST /users` (or `lumida user add`):
+Then open the **web app at http://127.0.0.1:8000/** and log in. Admins add colleagues under *People* (or with `lumida user add`). The API's interactive docs are at http://127.0.0.1:8000/api/docs.
 
 | Role | May |
 |---|---|

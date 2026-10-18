@@ -52,8 +52,12 @@ version = { attr = "lumida.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-# Migrations ship with the package so `lumida serve` can upgrade the store anywhere.
-lumida = ["py.typed", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
+# Migrations ship with the package so `lumida serve` can upgrade the store anywhere; the
+# web app's files ship with it too.
+lumida = [
+    "py.typed", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py",
+    "web/*.html", "web/*.css", "web/*.js", "web/*.svg",  # the web app (Stage 4.4)
+]
 
 # ---------------------------------------------------------------------------
 # ruff
