@@ -71,6 +71,14 @@ def test_the_endpoints(client: TestClient) -> None:
         ("POST", "/api/v1/relationships/{relationship_id}/review"),
         ("GET", "/api/v1/sources/{name}/questions"),
         ("POST", "/api/v1/sources/{name}/answers"),
+        ("GET", "/api/v1/about"),
+        ("GET", "/api/v1/connections"),
+        ("GET", "/api/v1/setup-scripts/{kind}"),
+        ("POST", "/api/v1/connection-tests"),
+        ("POST", "/api/v1/sources"),
+        ("POST", "/api/v1/sources/{name}/jobs"),
+        ("GET", "/api/v1/sources/{name}/jobs"),
+        ("GET", "/api/v1/jobs/{job_id}"),
     }
     assert client.get("/api/docs").status_code == 200
 

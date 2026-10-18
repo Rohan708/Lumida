@@ -12,6 +12,7 @@ import logging
 import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     import uvicorn
 
     from lumida.accounts.store import AuthPolicy
+    from lumida.onboarding.jobs import LLMFactory
 
 log = logging.getLogger("lumida.service")
 
@@ -80,20 +82,31 @@ def serve(
             "health endpoint on http://%s:%s/healthz", settings.health_host, settings.health_port
         )
     engine = create_db_engine(url)
+    from lumida.onboarding.jobs import recover_interrupted
+
+    if recover_interrupted(engine):
+        log.info("marked jobs interrupted by the last stop as failed")
     api = _start_api(settings, engine) if not once else None
-    log.info("scheduler started (checks every %gs)", tick)
+    llm = llm_factory(settings)
+    log.info(
+        "scheduler started (checks every %gs, jobs every %gs)", tick, settings.job_poll_seconds
+    )
+    next_schedule = 0.0
     try:
         while not stop.is_set():
-            try:
-                for report in run_due(engine, state):
-                    if report.skipped:
-                        continue
-                    log.info("%s", report.summary.replace("\n", " | "))
-            except Exception:  # e.g. the metadata store is briefly unreachable: try again
-                log.exception("scheduler tick failed; retrying next tick")
+            if time.monotonic() >= next_schedule:
+                next_schedule = time.monotonic() + tick
+                try:
+                    for report in run_due(engine, state):
+                        if report.skipped:
+                            continue
+                        log.info("%s", report.summary.replace("\n", " | "))
+                except Exception:  # e.g. the metadata store is briefly unreachable: try again
+                    log.exception("scheduler tick failed; retrying next tick")
+            _work_jobs(engine, llm, stop)
             if once:
                 break
-            stop.wait(tick)
+            stop.wait(max(0.0, min(settings.job_poll_seconds, next_schedule - time.monotonic())))
     finally:
         if api is not None:
             api.should_exit = True
@@ -104,13 +117,48 @@ def serve(
     return state
 
 
+def _work_jobs(engine: Engine, llm: "LLMFactory | None", stop: threading.Event) -> None:
+    """Every job waiting now ("run now", connection tests, AI work), oldest first."""
+    from lumida.onboarding.jobs import work_once
+
+    try:
+        while not stop.is_set() and work_once(engine, llm_factory=llm) is not None:
+            pass
+    except Exception:  # e.g. the metadata store is briefly unreachable: try again
+        log.exception("job queue check failed; retrying shortly")
+
+
+def start_job_worker(engine: Engine, settings: Settings, stop: threading.Event) -> threading.Thread:
+    """Work through queued jobs every ``job_poll_seconds`` on a background thread: for
+    ``lumida api`` on its own (``lumida serve`` does it in its main loop)."""
+    llm = llm_factory(settings)
+
+    def loop() -> None:
+        while not stop.is_set():
+            _work_jobs(engine, llm, stop)
+            stop.wait(settings.job_poll_seconds)
+
+    thread = threading.Thread(target=loop, name="lumida-jobs", daemon=True)
+    thread.start()
+    return thread
+
+
+def llm_factory(settings: Settings) -> "LLMFactory | None":
+    """How jobs get an AI client; None when AI features are off."""
+    if settings.llm_provider == "none":
+        return None
+    from lumida.reasoning.llm import llm_from_settings
+
+    return lambda: llm_from_settings(settings)
+
+
 def _start_api(settings: Settings, engine: Engine) -> "uvicorn.Server | None":
     if not settings.api_enabled:
         log.info("API off (LUMIDA_API_ENABLED=false)")
         return None
     from lumida.api.app import api_server, create_app, start_api_thread
 
-    app = create_app(engine, auth_policy(settings))
+    app = create_app(engine, auth_policy(settings), ai_enabled=settings.llm_provider != "none")
     server = api_server(app, settings.api_host, settings.api_port)
     start_api_thread(server)
     log.info("API on http://%s:%s/api/docs", settings.api_host, settings.api_port)

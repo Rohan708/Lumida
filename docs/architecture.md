@@ -38,6 +38,7 @@ Customer DBs (Postgres, MySQL, MSSQL, Snowflake, …) — read-only
 | `reconcile` | Source-vs-copy comparison from both sides' scans — see [design](design/stage3_databases.md) | 3 | No |
 | `pipeline` | `lumida run`: scan → discover → rules → rows → semantic → dbhealth → detect → reconcile → health → alert | 1.6 | No |
 | `api` | HTTP API under `/api/v1` (FastAPI): findings, rules, relationships, questions, health. Same functions as the CLI; personal logins and roles (4.3). See [design](design/api.md) | 4.2 | No |
+| `onboarding` | Adding databases from the web app, setup scripts, the job queue (run now, tests, AI) — see [design](design/onboarding.md) | 4.5 | AI jobs only propose |
 | `web` | The web app: plain HTML/CSS/JS served by the API at `/`, cookie login, strict CSP — see [design](design/web_app.md) | 4.4 | No |
 | `accounts` | People, roles, logins (scrypt), API keys, audit log, `lumida user` — see [design](design/accounts.md) | 4.3 | No |
 | `service` | `lumida serve`: daily schedule per source, lock, failure alerts, `/healthz`, migrations on start; packaged by `Dockerfile` + `deploy/` — see [design](design/self_hosted.md) | 4.1 | No |

@@ -23,12 +23,12 @@ from sqlalchemy import Engine
 from lumida import __version__
 from lumida.accounts.passwords import WeakPasswordError
 from lumida.accounts.store import AccountError, AccountNotFoundError, AuthPolicy
-from lumida.api import account_routes, routes
+from lumida.api import account_routes, onboarding_routes, routes
 from lumida.api.views import NotFoundError
 from lumida.context.questions import AnswerError
 from lumida.context.store import ContextError
 from lumida.detection.recording import InvalidTransitionError
-from lumida.ingestion.sources import SourceNotFoundError
+from lumida.ingestion.sources import SourceExistsError, SourceNotFoundError
 from lumida.rules.store import InvalidRuleError
 
 log = logging.getLogger("lumida.api")
@@ -36,7 +36,14 @@ log = logging.getLogger("lumida.api")
 # A request that can't be done as asked (the CLI prints these as one line): the API returns
 # {"detail": "..."} with 404, 409 or 422. Anything else is a bug and stays a 500.
 NOT_FOUND = (SourceNotFoundError, NotFoundError, AccountNotFoundError)
-CONFLICT = (InvalidTransitionError, InvalidRuleError, AnswerError, ContextError, AccountError)
+CONFLICT = (
+    InvalidTransitionError,
+    InvalidRuleError,
+    AnswerError,
+    ContextError,
+    AccountError,
+    SourceExistsError,
+)
 INVALID = (WeakPasswordError,)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -47,7 +54,9 @@ WEB_CSP = (
 )
 
 
-def create_app(engine: Engine, policy: AuthPolicy | None = None) -> FastAPI:
+def create_app(
+    engine: Engine, policy: AuthPolicy | None = None, *, ai_enabled: bool = False
+) -> FastAPI:
     app = FastAPI(
         title="Lumida API",
         version=__version__,
@@ -57,8 +66,10 @@ def create_app(engine: Engine, policy: AuthPolicy | None = None) -> FastAPI:
     )
     app.state.engine = engine
     app.state.policy = policy or AuthPolicy()
+    app.state.ai_enabled = ai_enabled  # whether to offer "propose rules" / "explain"
     app.include_router(account_routes.router)
     app.include_router(routes.router)
+    app.include_router(onboarding_routes.router)
     app.middleware("http")(_security_headers)
     # Last: everything that isn't the API is the web app's own files.
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

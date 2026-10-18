@@ -43,3 +43,39 @@ def resolve_connection_url(connection_ref: str | None, *, env_file: Path = DEFAU
             f"environment variable {connection_ref!r} is not set (process env or {env_file})"
         )
     return value
+
+
+# --- choosing a connection in the web app (Stage 4.5) -------------------------------------
+
+# A URL's scheme tells which kind of database it is ("postgresql+psycopg://" -> postgres).
+SCHEME_KINDS = {
+    "postgresql": "postgres",
+    "postgres": "postgres",
+    "mysql": "mysql",
+    "mariadb": "mysql",
+    "mssql": "sqlserver",
+    "oracle": "oracle",
+    "snowflake": "snowflake",
+}
+# Lumida's own metadata store is never offered as a database to watch.
+_NOT_OFFERED = {"LUMIDA_DATABASE_URL", "AIDE_DATABASE_URL"}
+
+
+def kind_of_url(url: str) -> str | None:
+    scheme = url.split("://", 1)[0] if "://" in url else ""
+    return SCHEME_KINDS.get(scheme.split("+", 1)[0].lower())
+
+
+def available_connections(*, env_file: Path = DEFAULT_ENV_FILE) -> dict[str, str]:
+    """Settings that hold a database URL, by name, with the kind of database: what an admin
+    can pick from when adding a database in the web app. Only names and kinds leave this
+    function, never a value."""
+    from_file = dotenv_values(env_file) if env_file.exists() else {}
+    found: dict[str, str] = {}
+    for name, value in [*from_file.items(), *os.environ.items()]:
+        if name in _NOT_OFFERED or not value:
+            continue
+        kind = kind_of_url(value)
+        if kind is not None:
+            found[name] = kind
+    return dict(sorted(found.items()))

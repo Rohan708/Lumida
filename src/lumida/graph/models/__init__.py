@@ -12,10 +12,13 @@ from lumida.graph.models.base import Base, StrEnumType, utcnow
 from lumida.graph.models.context import ContextNote, QuestionAnswer
 from lumida.graph.models.enums import (
     ACTIVE_FINDING_STATUSES,
+    ACTIVE_JOB_STATUSES,
     AssetKind,
     FindingCategory,
     FindingStatus,
     HealthScope,
+    JobKind,
+    JobStatus,
     Origin,
     RelationshipKind,
     RelationshipStatus,
@@ -29,6 +32,7 @@ from lumida.graph.models.enums import (
 )
 from lumida.graph.models.findings import Finding, finding_fingerprint
 from lumida.graph.models.history import FindingEvent, HealthSnapshot
+from lumida.graph.models.jobs import Job
 from lumida.graph.models.profiles import AssetProfile, ColumnProfile
 from lumida.graph.models.querylog import QueryJoin
 from lumida.graph.models.reconciliation import ReconciliationPair
@@ -42,6 +46,7 @@ from lumida.graph.models.sources import DataSource, IngestionRun, Tenant
 
 __all__ = [
     "ACTIVE_FINDING_STATUSES",
+    "ACTIVE_JOB_STATUSES",
     "Asset",
     "AssetColumn",
     "AssetColumnVersion",
@@ -61,6 +66,9 @@ __all__ = [
     "HealthScope",
     "HealthSnapshot",
     "IngestionRun",
+    "Job",
+    "JobKind",
+    "JobStatus",
     "Origin",
     "QueryJoin",
     "QuestionAnswer",

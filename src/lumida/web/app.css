@@ -131,3 +131,7 @@ tr:last-child td { border-bottom: 0; }
   .page { padding: 20px 16px 48px; }
   .score { font-size: 1.9rem; }
 }
+
+/* A checkbox and its label on one line. */
+.row > label { display: inline; margin: 0; color: var(--text); }
+.row > input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--amber); }

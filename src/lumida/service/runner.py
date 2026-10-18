@@ -108,7 +108,7 @@ def _maybe_run(
             return RunReport(source.name, True, "", skipped="already running elsewhere")
         state.attempts[source.id] = now
         log.info("run %s: starting", source.name)
-        ok, summary = _run(engine, source, adapter_factory)
+        ok, summary = run_source(engine, source, adapter_factory)
     status.last_run_at, status.last_ok, status.last_summary = now, ok, summary
     status.next_run_at = next_due(now, run_at, tz)
     log.info("run %s: %s", source.name, "ok" if ok else "FAILED")
@@ -117,7 +117,9 @@ def _maybe_run(
     return RunReport(source.name, ok, summary)
 
 
-def _run(engine: Engine, source: DataSource, adapter_factory: AdapterFactory) -> tuple[bool, str]:
+def run_source(
+    engine: Engine, source: DataSource, adapter_factory: AdapterFactory
+) -> tuple[bool, str]:
     """One pipeline run in its own session. Anything unexpected is reported, not raised:
     one broken source must not stop the others."""
     try:

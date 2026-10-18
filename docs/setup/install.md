@@ -31,6 +31,7 @@ docker compose ps
 Both services should show **healthy** within a minute. On start, Lumida brings its metadata store up to date by itself.
 
 ## 4. Add your databases
+**In the browser** (after creating the first admin, section 6): *Databases → Add a database*. It shows the read-only login script for your kind of database, lets you pick the connection by the name you gave it in `.env`, tests it, and starts the first run. **Or in the terminal:**
 ```bash
 docker compose exec lumida lumida source add shop --connection-ref SHOP_DB_URL --run-at 03:00 --timezone Europe/Berlin
 docker compose exec lumida lumida source alerts shop --webhook-ref SLACK_DATA_ALERTS

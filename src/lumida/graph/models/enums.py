@@ -124,3 +124,22 @@ class Role(StrEnum):
 class TokenKind(StrEnum):
     SESSION = "session"  # from logging in; expires
     API_KEY = "api_key"  # for scripts; until revoked
+
+
+class JobKind(StrEnum):
+    """Work started from the web app or API (Stage 4.5), done by `lumida serve`."""
+
+    RUN = "run"  # the whole nightly job, now
+    TEST_CONNECTION = "test_connection"  # can we log in, and what can we see?
+    PROPOSE_RULES = "propose_rules"  # AI
+    EXPLAIN = "explain"  # AI
+
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+ACTIVE_JOB_STATUSES = (JobStatus.QUEUED, JobStatus.RUNNING)

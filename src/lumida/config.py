@@ -83,6 +83,7 @@ class Settings(BaseSettings):
 
     # The self-hosted service (`lumida serve`, Stage 4.1).
     scheduler_tick_seconds: float = 60.0  # how often it checks what's due
+    job_poll_seconds: float = 2.0  # how soon "run now" etc. from the web app start (4.5)
     health_host: str = "127.0.0.1"  # 0.0.0.0 to reach /healthz from outside the container
     health_port: int = 8080  # 0 = no health endpoint
 

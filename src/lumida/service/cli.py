@@ -6,7 +6,13 @@ import threading
 
 from lumida.config import get_settings
 from lumida.service.migrate import upgrade_to_head
-from lumida.service.serve import auth_policy, configure_logging, install_signal_handlers, serve
+from lumida.service.serve import (
+    auth_policy,
+    configure_logging,
+    install_signal_handlers,
+    serve,
+    start_job_worker,
+)
 
 
 def add_service_parsers(subcommands: "argparse._SubParsersAction[argparse.ArgumentParser]") -> None:
@@ -43,9 +49,13 @@ def run_api_command(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging(settings)
     engine = create_db_engine(settings.database_url.get_secret_value())
+    stop = threading.Event()  # jobs from the web app ("run now", tests) still get done
+    start_job_worker(engine, settings, stop)
     try:
-        app = create_app(engine, auth_policy(settings))
+        ai = settings.llm_provider != "none"
+        app = create_app(engine, auth_policy(settings), ai_enabled=ai)
         api_server(app, args.host or settings.api_host, args.port or settings.api_port).run()
     finally:
+        stop.set()
         engine.dispose()
     return 0

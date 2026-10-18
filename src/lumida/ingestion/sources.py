@@ -55,16 +55,18 @@ def add_source(
     kind: SourceKind,
     connection_ref: str,
     settings: dict[str, Any] | None = None,
+    tenant_id: uuid.UUID | None = None,
 ) -> DataSource:
-    """Register a database. ``settings`` are validated now, so mistakes fail early."""
+    """Register a database, in ``tenant_id`` (the API) or the default tenant (the CLI).
+    ``settings`` are validated now, so mistakes fail early."""
     validated = ScanSettings.model_validate(settings or {})
-    tenant = default_tenant(session)
+    owner = tenant_id if tenant_id is not None else default_tenant(session).id
     if session.scalar(
-        select(DataSource.id).where(DataSource.tenant_id == tenant.id, DataSource.name == name)
+        select(DataSource.id).where(DataSource.tenant_id == owner, DataSource.name == name)
     ):
         raise SourceExistsError(f"a data source named {name!r} already exists")
     source = DataSource(
-        tenant_id=tenant.id,
+        tenant_id=owner,
         name=name,
         kind=kind,
         connection_ref=connection_ref,

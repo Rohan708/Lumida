@@ -3,9 +3,10 @@
   "use strict";
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const canObserve = "IntersectionObserver" in window;
   document.documentElement.classList.remove("no-js");
 
-  // Navigation: border on scroll, mobile menu -------------------------------------------
+  // Navigation: background on scroll, mobile menu ---------------------------------------
   const nav = document.querySelector(".nav");
   const toggle = document.querySelector(".nav__toggle");
   const links = document.getElementById("nav-links");
@@ -23,24 +24,17 @@
     }
   });
 
-  // Hero: the scan lights up three cells, one after another ------------------------------
-  const cells = [...document.querySelectorAll("[data-find]")];
-  const chips = [...document.querySelectorAll("[data-chip]")];
-  const light = (index) => {
-    cells.forEach((cell) => cell.classList.toggle("is-lit", Number(cell.dataset.find) <= index));
-    chips.forEach((chip) => chip.classList.toggle("is-lit", Number(chip.dataset.chip) <= index));
-  };
-  if (reduceMotion) {
-    light(cells.length - 1);
-  } else {
-    // One cell at a time, hold with all three lit, then go dark and start again.
-    const sequence = [0, 1, 2, 2, 2, -1];
-    let step = 0;
-    light(-1);
-    setInterval(() => {
-      light(sequence[step]);
-      step = (step + 1) % sequence.length;
-    }, 1300);
+  // Hero console: the evidence appears line by line, like a run printing it --------------
+  const code = document.querySelector("#console-code code");
+  if (code) {
+    const rows = code.innerHTML.split("\n").map((row) => `<span class="line">${row || " "}</span>`);
+    code.innerHTML = rows.join("");
+    const lines = [...code.querySelectorAll(".line")];
+    if (reduceMotion) {
+      lines.forEach((line) => line.classList.add("is-shown"));
+    } else {
+      lines.forEach((line, i) => setTimeout(() => line.classList.add("is-shown"), 500 + i * 320));
+    }
   }
 
   // Findings inbox: expand rows, confirm or dismiss -------------------------------------
@@ -80,30 +74,33 @@
 
   // Terminal: type the run out once it scrolls into view --------------------------------
   const terminal = document.getElementById("terminal");
-  const lines = terminal.textContent.split("\n");
-  const render = (count, caret) => {
-    const html = lines
+  const termLines = terminal.textContent.split("\n");
+  const renderTerminal = (count, caret) => {
+    const html = termLines
       .slice(0, count)
-      .map((line, i) =>
-        i === 0
-          ? `<span class="prompt">$</span>${escapeHtml(line.slice(1))}`
-          : escapeHtml(line).replace(/\bok\b/, '<span class="ok">ok</span>'),
+      .map((line) =>
+        line.startsWith("$")
+          ? `<span class="prompt">$</span>${escapeHtml(line.slice(2))}`
+          : escapeHtml(line).replace(/\b(ok|healthy)\b/, '<span class="ok">$1</span>'),
       )
       .join("\n");
     terminal.innerHTML = `<code>${html}${caret ? '<span class="caret"></span>' : ""}</code>`;
   };
-  if (reduceMotion || !("IntersectionObserver" in window)) {
-    render(lines.length, false);
+  if (reduceMotion || !canObserve) {
+    renderTerminal(termLines.length, false);
   } else {
-    render(0, true);
+    renderTerminal(0, true);
     const typeOut = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       typeOut.disconnect();
       let shown = 0;
       const next = () => {
         shown += 1;
-        render(shown, shown < lines.length);
-        if (shown < lines.length) setTimeout(next, shown === 1 ? 700 : 380);
+        renderTerminal(shown, shown < termLines.length);
+        if (shown < termLines.length) {
+          const isCommand = termLines[shown] && termLines[shown].startsWith("$");
+          setTimeout(next, isCommand ? 900 : 300);
+        }
       };
       next();
     }, { threshold: 0.5 });
@@ -111,23 +108,35 @@
   }
 
   // Reveal sections as they scroll in ---------------------------------------------------
-  const revealed = document.querySelectorAll(".reveal");
-  if (reduceMotion || !("IntersectionObserver" in window)) {
-    revealed.forEach((el) => el.classList.add("is-visible"));
+  // Anything that has come into view, or was scrolled past quickly, is shown.
+  let hidden = [...document.querySelectorAll(".reveal")];
+  if (reduceMotion) {
+    hidden.forEach((el) => el.classList.add("is-visible"));
   } else {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
+    let queued = false;
+    const revealSeen = () => {
+      queued = false;
+      const fold = window.innerHeight * 0.92;
+      hidden = hidden.filter((el) => {
+        if (el.getBoundingClientRect().top > fold) return true;
+        el.classList.add("is-visible");
+        return false;
       });
-    }, { threshold: 0.15 });
-    revealed.forEach((el) => observer.observe(el));
+      if (!hidden.length) window.removeEventListener("scroll", onReveal);
+    };
+    const onReveal = () => {
+      if (!queued) {
+        queued = true;
+        requestAnimationFrame(revealSeen);
+      }
+    };
+    window.addEventListener("scroll", onReveal, { passive: true });
+    window.addEventListener("resize", onReveal, { passive: true });
+    revealSeen();
   }
 
   // Early access: no sign-up backend yet, so say so honestly ----------------------------
-  // Set this to a form endpoint (e.g. Formspree, or your own API) when there is one.
+  // Set this to a form endpoint (e.g. Netlify Forms, Formspree, or your own API) when ready.
   const EARLY_ACCESS_ENDPOINT = "";
   const form = document.getElementById("signup");
   const message = document.getElementById("signup-msg");

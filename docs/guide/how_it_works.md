@@ -219,8 +219,9 @@ That's how every number in this guide was measured, and it's the benchmark every
 | 4.1 | Self-hosted install: one `docker compose up`, every database runs nightly at its own time, failed runs alerted, health check | ✅ built in CI, verified with compose |
 | 4.2 | API: everything from the terminal (findings, reviews, rules, questions, health) also over HTTP, for the web app and customers' scripts | ✅ tested on the lab + compose |
 | 4.3 | Accounts: everyone logs in as themselves, roles (viewer / reviewer / admin), API keys for scripts, an audit log of who did what, companies kept apart | ✅ |
-| 4.4 | **Web app**: health of every database, problems with evidence, confirm/reject, approve rules, answer questions, people and audit log, in the browser | ✅ built, checked in a browser |
-| **4.5+** | **Onboarding: add a database, test the connection and run it from the browser** | **next** |
+| 4.4 | **Web app**: health of every database, problems with evidence, confirm/reject, approve rules, answer questions, people and audit log, in the browser | ✅ |
+| 4.5 | **Onboarding**: add a database, test the connection, *Run now* and AI buttons, all in the browser (passwords stay on the server) | ✅ built (tests: user's run) |
+| **4.6** | **Rules as code, changing databases from the browser, packaging extras** | **next** |
 | 5 | Beta with 1–3 real companies; accuracy track record | |
 | 6 | Root cause ("why did this happen?") and suggested fixes | |
 | 7 | Launch: website, pricing, billing | |

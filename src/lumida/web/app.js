@@ -10,6 +10,7 @@ const API = "/api/v1";
 const main = document.getElementById("main");
 let me = null; // who is logged in: {email, role, ...}
 let newKey = null; // an API key just made, shown once on "My account"
+let about = null; // {version, ai_enabled}
 
 // --- small helpers ---------------------------------------------------------------------
 
@@ -136,6 +137,50 @@ function select(name, options, value, onchange) {
     options.map(([v, label]) => h("option", { value: v, selected: v === value }, label)));
 }
 
+// --- jobs ("run now", connection tests, AI work) ---------------------------------------
+
+const JOB_WORDS = { run: "Run", test_connection: "Connection test", propose_rules: "Rule proposals", explain: "Explanations" };
+const ACTIVE = new Set(["queued", "running"]);
+
+// Follow a job until it's done, showing its state in `line`; stops if the page changes.
+async function watchJob(job, line, done) {
+  const render = (j) => line.replaceChildren(stBadge(j.status), " ", JOB_WORDS[j.kind] || j.kind,
+    j.status === "queued" ? " waiting to start…" : j.status === "running" ? " in progress…" : "",
+    j.status === "failed" && j.error ? h("span", { class: "bad small" }, ` ${j.error}`) : "");
+  render(job);
+  while (ACTIVE.has(job.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (!line.isConnected) return; // the person moved on
+    job = await api(`/jobs/${job.id}`);
+    render(job);
+  }
+  if (done) await done(job);
+}
+
+function startJob(sourceName, kind, extra = {}) {
+  return api(`/sources/${enc(sourceName)}/jobs`, { method: "POST", body: { kind, ...extra } });
+}
+
+// A button that starts a job, and a line that follows it; the page reloads when it ends.
+function jobButton(sourceName, kind, label, { primary = false, extra = {}, line = h("span", { class: "small" }) } = {}) {
+  const button = h("button", { class: `btn${primary ? " btn--amber" : ""}`, onclick: async () => {
+    button.disabled = true;
+    try {
+      const job = await startJob(sourceName, kind, extra);
+      await watchJob(job, line, async (j) => {
+        const ok = j.status === "succeeded";
+        toast(ok ? `${JOB_WORDS[kind]} finished` : `${JOB_WORDS[kind]} failed: ${j.error || "see Runs"}`, !ok);
+        await route();
+      });
+    } catch (err) {
+      if (err.status !== 401) toast(err.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  } }, label);
+  return [button, line];
+}
+
 // --- the frame -------------------------------------------------------------------------
 
 function frame(section) {
@@ -204,10 +249,10 @@ async function sourcesPage() {
         h("br"),
         s.run_at ? `Runs daily at ${s.run_at} (${s.timezone})` : "Not scheduled"));
   });
-  show(heading("Databases"),
+  show(heading("Databases", null, can("admin") ? h("a", { class: "btn btn--amber", href: "#/add" }, "Add a database") : null),
     cards.length ? h("div", { class: "grid" }, cards)
-      : h("div", { class: "card empty" }, "No databases yet. Add one with ",
-        h("code", {}, "lumida source add"), " (see the install guide)."));
+      : h("div", { class: "card empty" }, "No databases yet. ",
+        can("admin") ? h("a", { href: "#/add" }, "Add the first one") : "Ask an admin to add one", "."));
 }
 
 const TABS = [["", "Problems"], ["rules", "Rules"], ["relationships", "Relationships"],
@@ -225,9 +270,12 @@ async function sourcePage(name, tab, query) {
     questions: () => questionsTab(source),
     runs: () => runsTab(source),
   }[tab]();
-  show(heading(source.name, h("a", { href: "#/" }, "Databases"),
-    scoreView(source.health_score)),
-  tabs, body);
+  const status = h("span", { class: "small" });
+  const controls = can("reviewer") ? jobButton(source.name, "run", "Run now", { line: status }) : [status];
+  const [latest] = await api(`/sources/${enc(source.name)}/jobs`, { params: { limit: 1 } });
+  if (latest && ACTIVE.has(latest.status)) watchJob(latest, status, () => route());
+  show(heading(source.name, h("a", { href: "#/" }, "Databases"), ...controls, scoreView(source.health_score)),
+    tabs, body);
 }
 
 async function healthCard(source) {
@@ -322,6 +370,9 @@ async function findingPage(id) {
     h("p", { class: "muted small" }, `${e.provider || "AI"}${e.model ? ` / ${e.model}` : ""}`,
       e.confidence !== undefined && e.confidence !== null ? ` · confidence ${Number(e.confidence).toFixed(2)}` : "",
       e.explained_title && e.explained_title !== f.title ? " · written for an earlier version of this problem" : "")) : null;
+  const explainButton = about.ai_enabled && can("reviewer") && ["open", "confirmed"].includes(f.status)
+    ? h("div", { class: "card row" }, ...jobButton(f.source, "explain", e ? "Explain again with AI" : "Explain with AI", { extra: { finding_id: f.id } }))
+    : null;
   const history = f.history.map((ev) => [h("span", { class: "small" }, when(ev.at)), ev.by,
     h("span", {}, ev.from_status ? `${ev.from_status} → ` : "new → ", stBadge(ev.to_status)), ev.note || ""]);
   show(heading(f.title, h("a", { href: `#/s/${enc(f.source)}` }, f.source), sevBadge(f.severity), stBadge(f.status)),
@@ -332,7 +383,7 @@ async function findingPage(id) {
           h("p", { class: "muted small" }, `${f.category.replace("_", " ")} · ${f.check_name}`,
             f.table ? h("span", {}, " · ", h("code", {}, f.column ? `${f.table}.${f.column}` : f.table)) : null,
             ` · first seen ${when(f.first_detected_at)} · last seen ${when(f.last_detected_at)}`)),
-        explanation,
+        explanation, explainButton,
         h("div", { class: "card" }, h("h2", {}, "Evidence"), h("pre", {}, JSON.stringify(f.evidence, null, 2))),
         h("div", { class: "card" }, h("h2", {}, "History"), table(["When", "Who", "Change", "Note"], history))),
       review || h("div", { class: "card muted" }, "Reviewing needs the reviewer role.")));
@@ -362,10 +413,14 @@ async function rulesTab(source) {
       return button;
     })) : "",
   ]);
-  return h("div", { class: "card stack" },
+  const propose = about.ai_enabled && can("reviewer")
+    ? h("div", { class: "row" }, ...jobButton(source.name, "propose_rules", "Propose rules with AI"),
+      h("span", { class: "muted small" }, "The AI reads the structure and measurements (no row values) and suggests rules for you to review."))
+    : null;
+  return h("div", { class: "card stack" }, propose,
     h("p", { class: "muted" }, proposed ? `${proposed} rule${proposed === 1 ? "" : "s"} waiting for review. Approved rules are checked every night as plain SQL.`
       : "Rules are checked every night as plain SQL. AI proposals appear here for review."),
-    table(["Status", "Rule", "From", ""], rows, "No rules yet. Propose some with lumida rules propose, or answer the questions."));
+    table(["Status", "Rule", "From", ""], rows, "No rules yet. Propose some with AI, or answer the questions."));
 }
 
 async function relationshipsTab(source, query) {
@@ -407,10 +462,119 @@ async function questionsTab(source) {
 }
 
 async function runsTab(source) {
-  const runs = await api(`/sources/${enc(source.name)}/runs`, { params: { limit: 30 } });
-  return h("div", { class: "card" }, table(["Started", "Finished", "Status", "Problem"],
-    runs.map((r) => [when(r.started_at), when(r.finished_at), stBadge(r.status), r.error_message || ""]),
-    "No runs yet. Lumida runs every night at the scheduled time."));
+  const [runs, jobs] = await Promise.all([
+    api(`/sources/${enc(source.name)}/runs`, { params: { limit: 30 } }),
+    api(`/sources/${enc(source.name)}/jobs`, { params: { limit: 20 } }),
+  ]);
+  return h("div", { class: "stack" },
+    h("div", { class: "card" }, h("h2", {}, "Runs"), table(["Started", "Finished", "Status", "Problem"],
+      runs.map((r) => [when(r.started_at), when(r.finished_at), stBadge(r.status), r.error_message || ""]),
+      "No runs yet. Lumida runs every night at the scheduled time, or press Run now.")),
+    h("div", { class: "card" }, h("h2", {}, "Asked for in the app"), table(["Asked", "What", "By", "Status", "Outcome"],
+      jobs.map((j) => [when(j.requested_at), JOB_WORDS[j.kind] || j.kind, j.requested_by, stBadge(j.status),
+        h("span", { class: "small" }, j.error || (j.result.summary || []).slice(0, 1).join(""))]),
+      "Nothing asked for yet.")));
+}
+
+// --- adding a database (admins) ---------------------------------------------------------
+
+const KIND_NAMES = { postgres: "PostgreSQL", mysql: "MySQL / MariaDB", sqlserver: "SQL Server", oracle: "Oracle", snowflake: "Snowflake" };
+const ZONES = ["UTC", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "America/Los_Angeles",
+  "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"];
+
+async function addPage() {
+  frame("sources");
+  const connections = await api("/connections");
+  const field = (id, label, input, hint) => h("div", { class: "field" }, h("label", { for: id }, label), input,
+    hint ? h("div", { class: "muted small" }, hint) : null);
+  const name = h("input", { id: "src-name", required: true, pattern: "[A-Za-z0-9_.-]+", placeholder: "e.g. shop" });
+  const kind = h("select", { id: "src-kind" }, Object.entries(KIND_NAMES).map(([k, label]) => h("option", { value: k }, label)));
+  const connection = h("select", { id: "src-conn" });
+  const include = h("input", { id: "src-include", placeholder: "all" });
+  const exclude = h("input", { id: "src-exclude", placeholder: "none" });
+  const runAt = h("input", { id: "src-run-at", type: "time", value: "03:00" });
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const zone = h("input", { id: "src-zone", value: localZone, list: "zones" });
+  const zones = h("datalist", { id: "zones" }, [...new Set([localZone, ...ZONES])].map((z) => h("option", { value: z })));
+  const script = h("pre");
+  const testLine = h("div", { class: "small" });
+  const error = h("p", { class: "bad small", role: "alert" });
+
+  const fillConnections = () => {
+    const matching = connections.filter((c) => c.kind === kind.value);
+    connection.replaceChildren(...(matching.length ? matching.map((c) => h("option", { value: c.name }, c.name))
+      : [h("option", { value: "" }, "none of this kind in .env")]));
+  };
+  const fillScript = async () => {
+    script.textContent = (await api(`/setup-scripts/${kind.value}`)).script;
+  };
+  kind.addEventListener("change", () => { fillConnections(); fillScript(); testLine.replaceChildren(); });
+  const list = (input) => input.value.split(",").map((s) => s.trim()).filter(Boolean);
+  const scope = () => ({ include_schemas: list(include), exclude_schemas: list(exclude) });
+
+  const test = h("button", { class: "btn", type: "button", onclick: async () => {
+    if (!connection.value) { toast("Pick a connection first", true); return; }
+    test.disabled = true;
+    try {
+      const job = await api("/connection-tests", { method: "POST", body: { kind: kind.value, connection_ref: connection.value, ...scope() } });
+      await watchJob(job, testLine, async (j) => {
+        if (j.status !== "succeeded") return;
+        const schemas = Object.entries(j.result.schemas).map(([s, n]) => `${s} (${n})`).join(", ");
+        testLine.replaceChildren(stBadge("succeeded"), ` Connected read-only. Can see ${j.result.tables} tables`,
+          schemas ? ` in ${schemas}.` : ". Nothing to watch: check the schemas and the login's grants.");
+      });
+    } catch (err) {
+      if (err.status !== 401) toast(err.message, true);
+    } finally { test.disabled = false; }
+  } }, "Test connection");
+  const runNow = h("input", { type: "checkbox", id: "src-run-now", checked: true });
+
+  const form = h("form", { class: "card", onsubmit: async (event) => {
+    event.preventDefault();
+    error.textContent = "";
+    try {
+      const added = await api("/sources", { method: "POST", body: {
+        name: name.value, kind: kind.value, connection_ref: connection.value,
+        run_at: runAt.value || null, timezone: zone.value || "UTC", ...scope() } });
+      if (runNow.checked) await startJob(added.name, "run");
+      toast(`${added.name} added${runNow.checked ? "; the first run has started" : ""}`);
+      location.hash = `#/s/${enc(added.name)}`;
+    } catch (err) {
+      if (err.status !== 401) error.textContent = err.message;
+    }
+  } },
+    h("h2", {}, "The database"),
+    field("src-name", "Name in Lumida", name),
+    field("src-kind", "Kind", kind),
+    field("src-conn", "Connection", connection,
+      "The connection URL, with its password, stays in the server's .env file; pick it by name here."),
+    h("div", { class: "row" }, field("src-include", "Only these schemas (comma-separated)", include),
+      field("src-exclude", "Leave out these schemas", exclude)),
+    h("div", { class: "row" }, field("src-run-at", "Run every night at", runAt, "Empty = no schedule"),
+      field("src-zone", "Time zone", zone), zones),
+    h("div", { class: "row" }, test), testLine,
+    h("div", { class: "field row" }, runNow, h("label", { for: "src-run-now" },
+      "Run it right after adding (the first run learns what's normal; it doesn't alert)")),
+    error,
+    h("button", { class: "btn btn--amber", type: "submit" }, "Add database"));
+
+  const copy = h("button", { class: "btn btn--small", type: "button", onclick: async () => {
+    try { await navigator.clipboard.writeText(script.textContent); toast("Copied"); } catch { toast("Select the text and copy it", true); }
+  } }, "Copy");
+  const help = h("div", { class: "stack" },
+    h("div", { class: "card stack" }, h("h2", {}, "1. A read-only login"),
+      h("p", { class: "muted small" }, "Run this on the database (fill in the <placeholders>). It grants reading only."),
+      script, copy),
+    h("div", { class: "card stack" }, h("h2", {}, "2. Its URL on the Lumida server"),
+      h("p", { class: "muted small" }, "Add one line to the server's .env under a name you choose (example at the end of the script), then restart Lumida: ",
+        h("code", {}, "docker compose up -d")),
+      h("p", { class: "muted small" }, connections.length
+        ? `Found in .env: ${connections.map((c) => `${c.name} (${c.kind})`).join(", ")}.`
+        : "No database URLs found in .env yet.")));
+  fillConnections();
+  await fillScript();
+  show(heading("Add a database", h("a", { href: "#/" }, "Databases")), h("div", { class: "split" }, form, help));
+  name.focus();
 }
 
 async function peoplePage() {
@@ -535,8 +699,10 @@ async function route() {
       return; // api() has sent us to the login page
     }
   }
+  if (!about) about = await api("/about").catch(() => ({ ai_enabled: false }));
   try {
     if (parts.length === 0) return await sourcesPage();
+    if (parts[0] === "add" && can("admin")) return await addPage();
     if (parts[0] === "s" && parts[1]) return await sourcePage(parts[1], parts[2] || "", query);
     if (parts[0] === "f" && parts[1]) return await findingPage(parts[1]);
     if (parts[0] === "people" && can("admin")) return await peoplePage();

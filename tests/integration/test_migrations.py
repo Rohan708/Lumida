@@ -29,6 +29,7 @@ EXPECTED_TABLES = {
     "app_user",
     "auth_token",
     "audit_event",
+    "job",
 }
 
 
