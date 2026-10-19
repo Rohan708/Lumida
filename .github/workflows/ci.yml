@@ -35,11 +35,31 @@ jobs:
         run: pytest
 
   docker-image:
-    # The self-hosted image must always build (Stage 4.1). Not pushed anywhere yet.
+    # The self-hosted image must always build (Stage 4.1). Published only by release.yml.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the image
         run: docker build -t lumida:ci .
       - name: Smoke test
-        run: docker run --rm lumida:ci version
+        run: |
+          docker run --rm lumida:ci version
+          docker run --rm --entrypoint python lumida:ci -c "import lumida.web, pathlib; print(sorted(p.name for p in pathlib.Path(lumida.web.__path__[0]).iterdir()))"
+      - name: The SQL Server variant refuses to build without the licence accepted
+        run: |
+          if docker build --build-arg MSSQL=yes -t lumida:no-eula . ; then
+            echo "built without ACCEPT_MSSQL_EULA=yes"; exit 1
+          fi
+
+  docker-image-sqlserver:
+    # Building it accepts Microsoft's ODBC driver licence (https://aka.ms/odbc18eula), so it
+    # runs only once the repository owner says so: set the repository variable
+    # MSSQL_EULA_ACCEPTED to "yes" (Settings -> Secrets and variables -> Actions -> Variables).
+    if: vars.MSSQL_EULA_ACCEPTED == 'yes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the SQL Server variant
+        run: docker build --build-arg MSSQL=yes --build-arg ACCEPT_MSSQL_EULA=yes -t lumida:ci-sqlserver .
+      - name: Smoke test
+        run: docker run --rm --entrypoint python lumida:ci-sqlserver -c "import pyodbc; print(pyodbc.drivers())"

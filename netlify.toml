@@ -1,0 +1,17 @@
+# The public website (landing page) on Netlify: connect the GitHub repo in Netlify and it
+# publishes the website/ folder on every push to main. No build step.
+# Sign-ups from the "Request early access" form appear under Netlify -> Forms.
+# (The Lumida product itself is never hosted here: it runs on each customer's machines.)
+
+[build]
+  publish = "website"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

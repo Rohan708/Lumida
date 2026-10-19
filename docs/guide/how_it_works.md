@@ -220,9 +220,9 @@ That's how every number in this guide was measured, and it's the benchmark every
 | 4.2 | API: everything from the terminal (findings, reviews, rules, questions, health) also over HTTP, for the web app and customers' scripts | ✅ tested on the lab + compose |
 | 4.3 | Accounts: everyone logs in as themselves, roles (viewer / reviewer / admin), API keys for scripts, an audit log of who did what, companies kept apart | ✅ |
 | 4.4 | **Web app**: health of every database, problems with evidence, confirm/reject, approve rules, answer questions, people and audit log, in the browser | ✅ |
-| 4.5 | **Onboarding**: add a database, test the connection, *Run now* and AI buttons, all in the browser (passwords stay on the server) | ✅ built (tests: user's run) |
-| **4.6** | **Rules as code, changing databases from the browser, packaging extras** | **next** |
-| 5 | Beta with 1–3 real companies; accuracy track record | |
+| 4.5 | **Onboarding**: add a database, test the connection, *Run now* and AI buttons, all in the browser (passwords stay on the server) | ✅ |
+| 4.6 | Rules as code (a YAML file in git, checked in CI with `lumida check`), changing and removing databases in the browser, the SQL Server image, image publishing | ✅ built (tests: user's run) |
+| **5** | **Beta with 1–3 real companies** | **next** |
 | 6 | Root cause ("why did this happen?") and suggested fixes | |
 | 7 | Launch: website, pricing, billing | |
 

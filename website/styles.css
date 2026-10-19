@@ -308,3 +308,6 @@ html:not(.no-js) .reveal:not(.is-visible) { opacity: 0; transform: translateY(14
   .reveal, .console__code .line { transition: none; }
   .caret { animation: none; }
 }
+
+.cta__alt { margin-top: 18px; font-size: 0.9rem; color: var(--dim); }
+.cta__alt a, .section__aside a { color: var(--champagne); }

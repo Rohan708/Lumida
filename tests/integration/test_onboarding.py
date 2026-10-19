@@ -217,3 +217,46 @@ def test_other_tenants_see_nothing(client: TestClient) -> None:
     assert client.get("/api/v1/sources/shop/jobs", headers=theirs).status_code == 404
     refused = client.post("/api/v1/sources/shop/jobs", headers=theirs, json={"kind": "run"})
     assert refused.status_code == 404
+
+
+# --- changing and removing a database, rules download (Stage 4.6) -------------------------
+
+
+def test_change_pause_and_download_rules(client: TestClient) -> None:
+    admin, reviewer = _as(client, ADMIN), _as(client, REVIEWER)
+    change = {"run_at": "01:15", "timezone": "Europe/Berlin", "exclude_schemas": ["aide_lab"]}
+    changed = _ok(client.patch("/api/v1/sources/shop", headers=admin, json=change))
+    assert (changed["run_at"], changed["timezone"]) == ("01:15", "Europe/Berlin")
+    assert changed["exclude_schemas"] == ["aide_lab"]
+    assert client.patch("/api/v1/sources/shop", headers=reviewer, json=change).status_code == 403
+    bad = client.patch("/api/v1/sources/shop", headers=admin, json={"timezone": "Mars/Base"})
+    assert bad.status_code == 422
+
+    paused = _ok(client.patch("/api/v1/sources/shop", headers=admin, json={"paused": True}))
+    assert paused["disabled"] is True
+    assert paused["run_at"] == "01:15"  # pausing keeps the schedule
+    resumed = _ok(client.patch("/api/v1/sources/shop", headers=admin, json={"paused": False}))
+    assert resumed["disabled"] is False
+
+    download = client.get("/api/v1/sources/shop/rules/export", headers=reviewer)
+    assert download.status_code == 200
+    assert "attachment" in download.headers["content-disposition"]
+    assert download.text.startswith("# Lumida rules for shop.")
+
+
+def test_removing_a_database_needs_its_name(client: TestClient, store: tuple[Engine, str]) -> None:
+    engine, _ = store
+    admin = _as(client, ADMIN)
+    with Session(engine) as session:
+        broken_id = get_source(session, "broken").id
+        assert session.scalars(select(Job).where(Job.data_source_id == broken_id)).all()
+    refused = client.delete("/api/v1/sources/broken", headers=admin, params={"confirm": "brokn"})
+    assert refused.status_code == 409
+    assert "repeat its name" in refused.json()["detail"]
+    gone = client.delete("/api/v1/sources/broken", headers=admin, params={"confirm": "broken"})
+    assert gone.status_code == 204
+    assert client.get("/api/v1/sources/broken", headers=admin).status_code == 404
+    with Session(engine) as session:  # its jobs and runs went with it
+        assert session.scalars(select(Job).where(Job.data_source_id == broken_id)).all() == []
+    log = _ok(client.get("/api/v1/audit", headers=admin, params={"action": "source.remove"}))
+    assert log[0]["details"]["name"] == "broken"

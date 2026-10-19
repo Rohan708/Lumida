@@ -52,8 +52,7 @@ def run_api_command(args: argparse.Namespace) -> int:
     stop = threading.Event()  # jobs from the web app ("run now", tests) still get done
     start_job_worker(engine, settings, stop)
     try:
-        ai = settings.llm_provider != "none"
-        app = create_app(engine, auth_policy(settings), ai_enabled=ai)
+        app = create_app(engine, auth_policy(settings), ai_enabled=settings.ai_enabled)
         api_server(app, args.host or settings.api_host, args.port or settings.api_port).run()
     finally:
         stop.set()

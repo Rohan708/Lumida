@@ -57,3 +57,22 @@ def test_setup_scripts() -> None:
         assert "<strong password>" in script or kind == "snowflake", kind
         for forbidden in ("GRANT ALL", "INSERT", "UPDATE", "DELETE", "DROP"):
             assert forbidden not in script.upper(), (kind, forbidden)
+
+
+def test_setup_writes_env_keeping_other_lines(tmp_path: Path) -> None:
+    from lumida.service.setup import write_env
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "# my notes\nSHOP_DB_URL=postgresql://x\nLUMIDA_DATABASE_URL=old\n", encoding="utf-8"
+    )
+    write_env(env, {"LUMIDA_DATABASE_URL": "new", "LUMIDA_OFFLINE": "true"})
+    assert env.read_text(encoding="utf-8").splitlines() == [
+        "# my notes",
+        "SHOP_DB_URL=postgresql://x",
+        "LUMIDA_DATABASE_URL=new",
+        "LUMIDA_OFFLINE=true",
+    ]
+    fresh = tmp_path / "new.env"
+    write_env(fresh, {"LUMIDA_DATABASE_URL": "x"})
+    assert fresh.read_text(encoding="utf-8") == "LUMIDA_DATABASE_URL=x\n"

@@ -42,7 +42,7 @@ Customer DBs (Postgres, MySQL, MSSQL, Snowflake, …) — read-only
 | `web` | The web app: plain HTML/CSS/JS served by the API at `/`, cookie login, strict CSP — see [design](design/web_app.md) | 4.4 | No |
 | `accounts` | People, roles, logins (scrypt), API keys, audit log, `lumida user` — see [design](design/accounts.md) | 4.3 | No |
 | `service` | `lumida serve`: daily schedule per source, lock, failure alerts, `/healthz`, migrations on start; packaged by `Dockerfile` + `deploy/` — see [design](design/self_hosted.md) | 4.1 | No |
-| `rules` | Safe rule format, storage + human review, nightly checks compiled to read-only SQL — see [design](design/ai_rules.md) | 2 | No |
+| `rules` | Safe rule format, storage + human review, nightly checks compiled to read-only SQL; rules as YAML and `lumida check` for CI ([design](design/rules_as_code.md)) — see [design](design/ai_rules.md) | 2 | No |
 | `reasoning` | LLM providers (Gemini first, switchable); privacy-safe context; rule proposals, second opinions on unsure relationships, guarded finding explanations ([design](design/ai_assist.md)); later root cause | 2, 6 | **Yes** (confidence + evidence; human-reviewed) |
 | `api` | FastAPI backend | 4 | — |
 | `fixes` | Human-approved fix proposals | 6 | Yes (reviewed) |

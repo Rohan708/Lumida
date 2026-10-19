@@ -1,6 +1,6 @@
 # Design: onboarding and the job queue (Stage 4.5)
 
-**Status:** built 2026-10-18. Lint, types and the quick unit tests are clean. The "Add a database" form and a connection test were checked in the browser against the local test lab. The integration tests are pending the user's run.
+**Status:** built 2026-10-18. Lint, types and the quick unit tests are clean. The "Add a database" form and a connection test were checked in the browser against the local test lab. The full test suite passes.
 **Code:**
 - `onboarding/jobs.py` (queue + worker) and `onboarding/setup_scripts.py`
 - `api/onboarding_routes.py`

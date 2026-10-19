@@ -26,6 +26,8 @@ class SourceOut(BaseModel):
     connection_ref: str | None  # the *name* of the setting holding the URL, never the URL
     run_at: str | None  # local "HH:MM"; None = not scheduled
     timezone: str
+    include_schemas: list[str]
+    exclude_schemas: list[str]
     created_at: datetime
     disabled: bool
     baseline_done: bool  # False until the first ("quiet baseline") run finished

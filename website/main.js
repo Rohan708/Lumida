@@ -135,11 +135,13 @@
     revealSeen();
   }
 
-  // Early access: no sign-up backend yet, so say so honestly ----------------------------
-  // Set this to a form endpoint (e.g. Netlify Forms, Formspree, or your own API) when ready.
-  const EARLY_ACCESS_ENDPOINT = "";
+  // Early access ------------------------------------------------------------------------
+  // On Netlify, the form is collected by Netlify Forms (the form tag has data-netlify):
+  // it's posted, URL-encoded, to the page itself. Previewed locally there's nothing to
+  // collect it, so the page says so instead of pretending.
   const form = document.getElementById("signup");
   const message = document.getElementById("signup-msg");
+  const isLocalPreview = ["localhost", "127.0.0.1", ""].includes(location.hostname);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const email = form.email.value.trim();
@@ -149,15 +151,15 @@
       message.classList.add("is-error");
       return;
     }
-    if (!EARLY_ACCESS_ENDPOINT) {
-      message.textContent = "Sign-ups open soon. This page is a preview and doesn't store emails yet.";
+    if (isLocalPreview) {
+      message.textContent = "This is a local preview: sign-ups are collected once the site is live.";
       return;
     }
     try {
-      const response = await fetch(EARLY_ACCESS_ENDPOINT, {
+      const response = await fetch("/", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ email }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(new FormData(form)).toString(),
       });
       if (!response.ok) throw new Error(String(response.status));
       form.reset();

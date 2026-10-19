@@ -1,13 +1,29 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]  # 77+: SPDX licence expressions
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lumida"
 dynamic = ["version"]
-description = "Database-agnostic, AI-assisted anomaly detection: discovers structure and hidden relationships, learns normal, finds anomalies with evidence."
-readme = "README.md"
+description = "Points read-only at your databases, learns what normal looks like, and tells you what's wrong, with evidence. Runs entirely on your own machines."
+readme = "PACKAGE.md"  # the page on PyPI; README.md is for developers of Lumida
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Rohan Chauhan" }]
+keywords = ["data quality", "anomaly detection", "database monitoring", "postgres", "mysql",
+            "sql server", "oracle", "snowflake", "self-hosted", "data observability"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+]
 dependencies = [
     "sqlalchemy>=2.0.30,<3",
     "alembic>=1.16,<2",
@@ -30,6 +46,9 @@ mysql = ["pymysql>=1.1"]
 sqlserver = ["pyodbc>=5.1"]  # also needs Microsoft's "ODBC Driver 18 for SQL Server"
 oracle = ["oracledb>=2.0"]
 snowflake = ["snowflake-sqlalchemy>=1.6"]
+# Every driver that installs without extra system software (SQL Server needs Microsoft's
+# ODBC driver too, so it stays separate).
+all = ["pymysql>=1.1", "oracledb>=2.0", "snowflake-sqlalchemy>=1.6"]
 dev = [
     "faker>=30",
     "httpx>=0.27",  # FastAPI's test client
@@ -44,6 +63,12 @@ dev = [
 
 [project.scripts]
 lumida = "lumida.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Rohan708/Lumida"
+Documentation = "https://github.com/Rohan708/Lumida/blob/main/docs/setup/install.md"
+Source = "https://github.com/Rohan708/Lumida"
+Issues = "https://github.com/Rohan708/Lumida/issues"
 
 [tool.setuptools.dynamic]
 version = { attr = "lumida.__version__" }

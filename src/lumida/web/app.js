@@ -227,7 +227,7 @@ function loginPage() {
     h("button", { class: "btn btn--amber", type: "submit" }, "Log in"),
     h("p", { class: "muted small" }, "No account? Ask your Lumida admin."));
   show(h("div", { class: "login" },
-    h("div", { class: "brand" }, h("img", { src: "mark.svg", alt: "", width: 34, height: 34 }), "Lumida"),
+    h("div", { class: "brand" }, h("img", { src: "mark.svg", alt: "", width: 34, height: 34 }), "lumida"),
     form));
   email.focus();
 }
@@ -261,15 +261,18 @@ const TABS = [["", "Problems"], ["rules", "Rules"], ["relationships", "Relations
 async function sourcePage(name, tab, query) {
   frame("sources");
   const source = await api(`/sources/${enc(name)}`);
+  const shown = can("admin") ? [...TABS, ["settings", "Settings"]] : TABS;
   const tabs = h("nav", { class: "tabs", "aria-label": "Sections" },
-    TABS.map(([key, label]) => h("a", { href: `#/s/${enc(name)}${key ? `/${key}` : ""}`, class: key === tab ? "on" : "" }, label)));
-  const body = await {
+    shown.map(([key, label]) => h("a", { href: `#/s/${enc(name)}${key ? `/${key}` : ""}`, class: key === tab ? "on" : "" }, label)));
+  const pages = {
     "": () => findingsTab(source, query),
     rules: () => rulesTab(source),
     relationships: () => relationshipsTab(source, query),
     questions: () => questionsTab(source),
     runs: () => runsTab(source),
-  }[tab]();
+    settings: () => (can("admin") ? settingsTab(source) : h("div", { class: "card muted" }, "Settings need the admin role.")),
+  };
+  const body = await (pages[tab] || pages[""])();
   const status = h("span", { class: "small" });
   const controls = can("reviewer") ? jobButton(source.name, "run", "Run now", { line: status }) : [status];
   const [latest] = await api(`/sources/${enc(source.name)}/jobs`, { params: { limit: 1 } });
@@ -417,9 +420,14 @@ async function rulesTab(source) {
     ? h("div", { class: "row" }, ...jobButton(source.name, "propose_rules", "Propose rules with AI"),
       h("span", { class: "muted small" }, "The AI reads the structure and measurements (no row values) and suggests rules for you to review."))
     : null;
+  const asCode = h("div", { class: "row" },
+    h("a", { class: "btn btn--small", href: `${API}/sources/${enc(source.name)}/rules/export`, download: `lumida-rules-${source.name}.yaml` },
+      "Download as YAML"),
+    h("span", { class: "muted small" }, "Keep the approved rules in git; ", h("code", {}, "lumida check"), " runs them in your CI."));
   return h("div", { class: "card stack" }, propose,
     h("p", { class: "muted" }, proposed ? `${proposed} rule${proposed === 1 ? "" : "s"} waiting for review. Approved rules are checked every night as plain SQL.`
       : "Rules are checked every night as plain SQL. AI proposals appear here for review."),
+    asCode,
     table(["Status", "Rule", "From", ""], rows, "No rules yet. Propose some with AI, or answer the questions."));
 }
 
@@ -474,6 +482,60 @@ async function runsTab(source) {
       jobs.map((j) => [when(j.requested_at), JOB_WORDS[j.kind] || j.kind, j.requested_by, stBadge(j.status),
         h("span", { class: "small" }, j.error || (j.result.summary || []).slice(0, 1).join(""))]),
       "Nothing asked for yet.")));
+}
+
+// --- a database's settings (admins) -----------------------------------------------------
+
+async function settingsTab(source) {
+  const field = (id, label, input, hint) => h("div", { class: "field" }, h("label", { for: id }, label), input,
+    hint ? h("div", { class: "muted small" }, hint) : null);
+  const runAt = h("input", { id: "set-run-at", type: "time", value: source.run_at || "" });
+  const zone = h("input", { id: "set-zone", value: source.timezone });
+  const include = h("input", { id: "set-include", value: (source.include_schemas || []).join(", "), placeholder: "all" });
+  const exclude = h("input", { id: "set-exclude", value: (source.exclude_schemas || []).join(", "), placeholder: "none" });
+  const list = (input) => input.value.split(",").map((s) => s.trim()).filter(Boolean);
+  const save = h("form", { class: "card", onsubmit: (event) => {
+    event.preventDefault();
+    act(event.submitter, () => api(`/sources/${enc(source.name)}`, { method: "PATCH", body: {
+      run_at: runAt.value || null, timezone: zone.value || "UTC",
+      include_schemas: list(include), exclude_schemas: list(exclude) } }), "Saved");
+  } },
+    h("h2", {}, "Schedule and scope"),
+    h("div", { class: "row" }, field("set-run-at", "Run every night at", runAt, "Empty = no schedule"), field("set-zone", "Time zone", zone)),
+    h("div", { class: "row" }, field("set-include", "Only these schemas", include), field("set-exclude", "Leave out these schemas", exclude)),
+    h("p", { class: "muted small" }, "Connection: ", h("code", {}, source.connection_ref || "—"), " (in the server's .env)."),
+    h("button", { class: "btn btn--amber", type: "submit" }, "Save"));
+
+  const pause = h("button", { class: "btn", onclick: () => act(pause,
+    () => api(`/sources/${enc(source.name)}`, { method: "PATCH", body: { paused: !source.disabled } }),
+    source.disabled ? "Nightly runs resumed" : "Paused: no nightly runs until you resume") },
+  source.disabled ? "Resume nightly runs" : "Pause nightly runs");
+
+  const confirm = h("input", { id: "remove-confirm", placeholder: source.name, autocomplete: "off" });
+  const remove = h("button", { class: "btn btn--danger", onclick: async () => {
+    if (confirm.value !== source.name) { toast(`Type ${source.name} to confirm`, true); return; }
+    remove.disabled = true;
+    try {
+      await api(`/sources/${enc(source.name)}`, { method: "DELETE", params: { confirm: confirm.value } });
+      toast(`${source.name} removed`);
+      location.hash = "#/";
+    } catch (err) {
+      if (err.status !== 401) toast(err.message, true);
+      remove.disabled = false;
+    }
+  } }, "Remove");
+
+  return h("div", { class: "split" },
+    save,
+    h("div", { class: "stack" },
+      h("div", { class: "card stack" }, h("h2", {}, "Pause"),
+        h("p", { class: "muted small" }, source.disabled
+          ? "Paused: Lumida doesn't run this database at night. Run now still works."
+          : "Stop the nightly runs for a while (e.g. during a migration). Nothing is deleted."),
+        pause),
+      h("div", { class: "card stack danger" }, h("h2", {}, "Remove"),
+        h("p", { class: "muted small" }, "Forget everything Lumida learned about this database: its history, problems, rules and answers. The database itself is never touched. This can't be undone."),
+        h("label", { for: "remove-confirm" }, `Type ${source.name} to confirm`), h("div", { class: "row" }, confirm, remove))));
 }
 
 // --- adding a database (admins) ---------------------------------------------------------

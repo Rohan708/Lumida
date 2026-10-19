@@ -1,20 +1,22 @@
-/* Lumida web app. Same brand as the website: dark, calm, one warm amber light. */
+/* Lumida web app. Same brand as the website ("Luminous Void"): a deep graphite canvas,
+   white type, one restrained champagne light, hairline borders. Fonts are the system's
+   (Geist if installed): the page's security policy loads nothing from other sites. */
 
 :root {
-  --bg: #0b1020;
-  --surface: #111833;
-  --surface-2: #161f40;
-  --line: #25305a;
-  --text: #e6e9f2;
-  --muted: #8a94b8;
-  --amber: #ffb547;
-  --amber-glow: rgba(255, 181, 71, 0.3);
-  --teal: #2dd4bf;
-  --coral: #ff6b6b;
-  --violet: #a78bfa;
-  --radius: 12px;
-  --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #e4e4e7;
+  --muted: #a1a1aa;
+  --amber: #f5d0a9; /* the champagne accent (name kept from the first design) */
+  --amber-glow: rgba(245, 208, 169, 0.22);
+  --teal: #5eead4;
+  --coral: #fca5a5;
+  --violet: #c4b5fd;
+  --radius: 14px;
+  --font-head: "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
   color-scheme: dark;
 }
@@ -23,7 +25,7 @@
 body { margin: 0; background: var(--bg); color: var(--text); font: 400 15px/1.55 var(--font-body); -webkit-font-smoothing: antialiased; }
 a { color: var(--amber); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1, h2, h3 { font-family: var(--font-head); line-height: 1.2; margin: 0 0 0.6em; letter-spacing: -0.01em; }
+h1, h2, h3 { font-family: var(--font-head); line-height: 1.2; margin: 0 0 0.6em; letter-spacing: -0.03em; font-weight: 500; color: #fff; }
 h1 { font-size: 1.7rem; }
 h2 { font-size: 1.2rem; }
 h3 { font-size: 1rem; }
@@ -33,13 +35,13 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
-.skip { position: absolute; left: -999px; top: 8px; background: var(--amber); color: var(--bg); padding: 8px 12px; border-radius: 8px; z-index: 100; }
+.skip { position: absolute; left: -999px; top: 8px; background: #fff; color: var(--bg); padding: 8px 12px; border-radius: 8px; z-index: 100; }
 .skip:focus { left: 8px; }
 [hidden] { display: none !important; }
 
 /* Header ----------------------------------------------------------------------------- */
 .top { display: flex; align-items: center; gap: 24px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font: 600 1.1rem var(--font-head); }
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; font: 600 1.15rem var(--font-head); letter-spacing: -0.045em; }
 .brand:hover { text-decoration: none; }
 .nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
 .nav a { color: var(--muted); padding: 6px 12px; border-radius: 8px; }
@@ -64,8 +66,8 @@ pre { background: var(--surface-2); border: 1px solid var(--line); border-radius
 .btn { font: 600 0.88rem/1 var(--font-body); padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .btn:hover { border-color: var(--muted); }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.btn--amber { background: var(--amber); border-color: var(--amber); color: #1a1205; }
-.btn--amber:hover { box-shadow: 0 0 18px var(--amber-glow); border-color: var(--amber); }
+.btn--amber { background: #fff; border-color: #fff; color: #09090b; }
+.btn--amber:hover { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08); border-color: #fff; }
 .btn--danger { color: var(--coral); }
 .btn--small { padding: 6px 10px; font-size: 0.8rem; }
 .link { background: none; border: 0; color: var(--amber); cursor: pointer; padding: 0; font: inherit; }
@@ -135,3 +137,7 @@ tr:last-child td { border-bottom: 0; }
 /* A checkbox and its label on one line. */
 .row > label { display: inline; margin: 0; color: var(--text); }
 .row > input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--amber); }
+
+/* Danger zone (removing a database) */
+.danger { border-color: rgba(252, 165, 165, 0.35); }
+.danger h2 { color: var(--coral); }

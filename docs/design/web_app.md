@@ -49,6 +49,8 @@ People work with Lumida in a browser instead of a terminal. They see how healthy
   - an API key created and revoked from the browser
   - fixed along the way: on phone-width screens the sticky header covered the page
 
+**Since 4.6:** the website's "Luminous Void" look and the aperture logo; a *Settings* tab for admins (schedule, schemas, pause, remove); *Download as YAML* on the Rules tab. See [`rules_as_code.md`](rules_as_code.md).
+
 ## 5. Not yet
 - **Relationship map** (a diagram); for now a list. `lumida docs` still writes the Mermaid map.
 - **Adding databases, "run now", AI proposals and explanations from the browser**: they need a job queue (4.5).

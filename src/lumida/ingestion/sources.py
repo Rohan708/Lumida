@@ -18,6 +18,7 @@ from lumida.graph.models import (
     Finding,
     HealthSnapshot,
     IngestionRun,
+    Job,
     QueryJoin,
     QuestionAnswer,
     ReconciliationPair,
@@ -115,6 +116,7 @@ def remove_source(session: Session, source: DataSource) -> dict[str, int]:
     # Order matters: children before the rows they reference. Finding events and
     # relationship columns go with their parents (ON DELETE CASCADE).
     steps = [
+        ("job", delete(Job).where(Job.data_source_id == source.id)),
         (
             "reconciliation_pair",
             delete(ReconciliationPair).where(

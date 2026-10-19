@@ -94,6 +94,8 @@ def source_out(session: Session, source: DataSource) -> SourceOut:
         connection_ref=source.connection_ref,
         run_at=settings.run_at,
         timezone=settings.timezone,
+        include_schemas=list(settings.include_schemas),
+        exclude_schemas=list(settings.exclude_schemas),
         created_at=source.created_at,
         disabled=source.disabled_at is not None,
         baseline_done=source.baseline_completed_at is not None,

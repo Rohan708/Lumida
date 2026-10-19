@@ -145,7 +145,7 @@ def start_job_worker(engine: Engine, settings: Settings, stop: threading.Event) 
 
 def llm_factory(settings: Settings) -> "LLMFactory | None":
     """How jobs get an AI client; None when AI features are off."""
-    if settings.llm_provider == "none":
+    if not settings.ai_enabled:
         return None
     from lumida.reasoning.llm import llm_from_settings
 
@@ -158,10 +158,11 @@ def _start_api(settings: Settings, engine: Engine) -> "uvicorn.Server | None":
         return None
     from lumida.api.app import api_server, create_app, start_api_thread
 
-    app = create_app(engine, auth_policy(settings), ai_enabled=settings.llm_provider != "none")
+    app = create_app(engine, auth_policy(settings), ai_enabled=settings.ai_enabled)
     server = api_server(app, settings.api_host, settings.api_port)
     start_api_thread(server)
-    log.info("API on http://%s:%s/api/docs", settings.api_host, settings.api_port)
+    shown = "127.0.0.1" if settings.api_host == "0.0.0.0" else settings.api_host  # noqa: S104
+    log.info("web app on http://%s:%s (API docs at /api/docs)", shown, settings.api_port)
     return server
 
 

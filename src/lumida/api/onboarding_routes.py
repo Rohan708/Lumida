@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -19,12 +20,13 @@ from lumida.api.auth import DB, Admin, Reviewer, Viewer
 from lumida.api.schemas import SourceOut
 from lumida.api.views import NotFoundError, owned, source_out
 from lumida.context.store import ContextError
-from lumida.graph.models import DataSource, Finding, Job, JobKind, Role, SourceKind
+from lumida.graph.models import DataSource, Finding, Job, JobKind, Role, SourceKind, utcnow
 from lumida.ingestion.connections import available_connections
 from lumida.ingestion.settings import ScanSettings
-from lumida.ingestion.sources import add_source, get_source
+from lumida.ingestion.sources import add_source, get_source, remove_source
 from lumida.onboarding.jobs import enqueue
 from lumida.onboarding.setup_scripts import SETUP_SCRIPTS
+from lumida.rules.as_code import export_rules
 
 router = APIRouter(prefix="/api/v1")
 KINDS = Literal["postgres", "mysql", "sqlserver", "oracle", "snowflake"]
@@ -203,3 +205,63 @@ def job(job_id: uuid.UUID, session: DB, me: Viewer) -> JobOut:
     if found is None or found.tenant_id != me.tenant_id:
         raise NotFoundError(f"no job with id {job_id}")
     return job_out(session, found)
+
+
+# --- changing and removing a database (Stage 4.6) -----------------------------------------
+
+
+class SourceChange(BaseModel):
+    """Only the fields sent are changed. ``run_at: null`` stops the nightly schedule."""
+
+    model_config = {"extra": "forbid"}
+    run_at: str | None = None
+    timezone: str | None = None
+    include_schemas: list[str] | None = None
+    exclude_schemas: list[str] | None = None
+    paused: bool | None = None  # a paused database isn't run at night (Run now still works)
+
+
+@router.patch("/sources/{name}")
+def change_database(name: str, body: SourceChange, session: DB, me: Admin) -> SourceOut:
+    source = get_source(session, name, me.tenant_id)
+    change = body.model_dump(exclude_unset=True)
+    paused = change.pop("paused", None)
+    if change:
+        merged = ScanSettings.model_validate({**source.settings, **change})
+        source.settings = merged.model_dump(mode="json", exclude_defaults=True)
+    if paused is not None:
+        source.disabled_at = (source.disabled_at or utcnow()) if paused else None
+    audit(session, me.tenant_id, me.email, "source.change", source,
+          {**change, **({} if paused is None else {"paused": paused})})  # fmt: skip
+    session.commit()
+    return source_out(session, source)
+
+
+@router.delete("/sources/{name}", status_code=204)
+def remove_database(
+    name: str, session: DB, me: Admin, confirm: Annotated[str, Query()] = ""
+) -> None:
+    """Forget everything Lumida learned about a database (its scans, findings, rules,
+    answers, jobs). The database itself is never touched. ``confirm`` must repeat the name."""
+    source = get_source(session, name, me.tenant_id)
+    if confirm != source.name:
+        raise ContextError(f"to remove {source.name!r}, repeat its name in ?confirm=")
+    counts = remove_source(session, source)
+    audit(session, me.tenant_id, me.email, "source.remove", None,
+          {"name": name, "rows_deleted": sum(counts.values())})  # fmt: skip
+    session.commit()
+
+
+# --- rules as code (Stage 4.6) -------------------------------------------------------------
+
+
+@router.get("/sources/{name}/rules/export", response_class=PlainTextResponse)
+def export_rules_file(name: str, session: DB, me: Viewer) -> PlainTextResponse:
+    """The approved rules as YAML, to keep in git (``lumida rules import`` loads it back)."""
+    source = get_source(session, name, me.tenant_id)
+    filename = f"lumida-rules-{source.name}.yaml"
+    return PlainTextResponse(
+        export_rules(session, source),
+        media_type="application/yaml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

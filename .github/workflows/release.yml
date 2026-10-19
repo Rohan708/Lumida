@@ -1,0 +1,87 @@
+name: Release
+
+# Publishes a version when a tag like v0.4.0 is pushed:
+#   git tag v0.4.0 && git push origin v0.4.0
+# 1. checks the tag matches the package version (src/lumida/__init__.py)
+# 2. the Docker image  -> ghcr.io/<owner>/lumida:0.4.0 and :latest
+# 3. the Python package -> PyPI (pip install lumida), via PyPI "trusted publishing": no
+#    password or token is stored anywhere. One-time setup on pypi.org, see
+#    docs/setup/releasing.md.
+# Nothing is published until the first tag. The SQL Server image variant isn't published
+# (building it accepts Microsoft's driver licence), so each customer builds it themselves.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: The tag must match the package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          package="$(python3 -c "import re,pathlib; print(re.search(r'__version__ = \"(.+?)\"', pathlib.Path('src/lumida/__init__.py').read_text()).group(1))")"
+          if [ "$tag" != "$package" ]; then
+            echo "tag $tag but the package says $package: bump __version__ first"; exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name (the registry needs lower case)
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lumida" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: docker build -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
+
+      - name: Smoke test
+        run: docker run --rm "$IMAGE:$VERSION" version
+
+      - name: Log in to the registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish
+        run: |
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
+
+  pypi:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write  # trusted publishing: GitHub proves who it is to PyPI, no stored secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the package
+        run: |
+          python -m pip install build==1.2.2
+          python -m build
+      - name: Smoke test the wheel
+        run: |
+          python -m pip install dist/*.whl
+          lumida version
+          python -c "import lumida.web, pathlib; assert (pathlib.Path(lumida.web.__path__[0]) / 'index.html').exists()"
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

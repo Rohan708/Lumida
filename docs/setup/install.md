@@ -1,6 +1,13 @@
 # Install Lumida (self-hosted)
 
-Lumida runs as two containers inside your network: **Lumida itself** and **its own small Postgres** (the metadata store: what it has learned about your databases). It connects **read-only** to the databases you register and runs every one of them each night at its own time.
+Lumida runs **entirely on your own machines**: Lumida itself plus a small Postgres for what it learns about your databases (the metadata store). It connects **read-only** to the databases you register and checks each of them every night at its own time. There's no account, no registration and no telemetry: nothing is sent to Lumida's makers.
+
+There are two ways to install it. Neither needs the source code.
+
+| | Best for | Commands |
+|---|---|---|
+| **Docker** (below) | a server that runs 24/7; brings its own Postgres | `docker compose up -d` |
+| **pip** ([section 10](#10-without-docker-pip)) | trying it on a laptop, CI, teams without Docker; bring your own Postgres | `pip install lumida` → `lumida setup` → `lumida serve` |
 
 ## 1. Requirements
 - Docker with Compose (Docker Desktop, or Docker Engine + the compose plugin)
@@ -9,8 +16,8 @@ Lumida runs as two containers inside your network: **Lumida itself** and **its o
 - A **read-only login** on each of those databases: [`databases.md`](databases.md) (MySQL, SQL Server, Oracle, Snowflake) and `scripts/postgres/create_readonly_user.sql` (Postgres)
 
 ## 2. Configure
+Put two files in an empty folder: [`docker-compose.yml`](https://github.com/Rohan708/Lumida/blob/main/deploy/docker-compose.yml) and [`.env.example`](https://github.com/Rohan708/Lumida/blob/main/deploy/.env.example). Then:
 ```bash
-cd deploy
 cp .env.example .env        # Windows: copy .env.example .env
 ```
 Edit `.env`:
@@ -19,16 +26,18 @@ Edit `.env`:
   ```
   SHOP_DB_URL=postgresql+psycopg://lumida_readonly:<password>@db-host:5432/shop
   ```
-- Optional: a Slack webhook (`SLACK_DATA_ALERTS=https://hooks.slack.com/...`) and the AI settings.
+- Optional: a Slack webhook (`SLACK_DATA_ALERTS=https://hooks.slack.com/...`).
+- Optional: **AI features with your own provider and key** (section 11).
+- Optional: `LUMIDA_VERSION=0.4.0` to pin a version instead of `latest`.
 
 `.env` holds secrets. Keep it on the server, out of version control.
 
 ## 3. Start
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose ps
 ```
-Both services should show **healthy** within a minute. On start, Lumida brings its metadata store up to date by itself.
+The first start downloads the Lumida image. Both services should show **healthy** within a minute. On start, Lumida brings its metadata store up to date by itself.
 
 ## 4. Add your databases
 **In the browser** (after creating the first admin, section 6): *Databases → Add a database*. It shows the read-only login script for your kind of database, lets you pick the connection by the name you gave it in `.env`, tests it, and starts the first run. **Or in the terminal:**
@@ -77,8 +86,8 @@ Logins last 12 hours. After 5 wrong passwords an account is locked for 15 minute
 
 ## 7. Upgrade
 ```bash
-git pull                      # or download the new release
-docker compose up -d --build
+docker compose pull           # the new version (or change LUMIDA_VERSION in .env first)
+docker compose up -d
 ```
 Migrations run automatically on start. A run in progress finishes its current database before the old container stops (the stop timeout is 5 minutes).
 
@@ -96,5 +105,29 @@ docker compose down -v     # also deletes everything Lumida learned
 ```
 
 ## Notes
-- **Included drivers:** Postgres, MySQL, Oracle, Snowflake. SQL Server needs Microsoft's ODBC driver and its licence; a separate image variant follows.
-- **No outside connections are needed**, except to your databases, to Slack if you use it, and to the AI provider only if you turn AI features on.
+- **SQL Server:** build the image with Microsoft's ODBC driver from a copy of the repository; this accepts Microsoft's licence (https://aka.ms/odbc18eula): `docker build -t lumida:sqlserver --build-arg MSSQL=yes --build-arg ACCEPT_MSSQL_EULA=yes .`, then set `LUMIDA_IMAGE=lumida` and `LUMIDA_VERSION=sqlserver` in `.env`.
+- **No internet on the server (air-gapped):** on a connected machine run `docker save ghcr.io/rohan708/lumida:0.4.0 -o lumida.tar`; copy the file over and run `docker load -i lumida.tar`, then `docker compose up -d`.
+- **Changing or removing a database:** in the web app, the database's *Settings* tab (admins).
+- **Rules in git and CI:** *Rules → Download as YAML*, and `lumida check` in your pipeline ([`rules_as_code.md`](../design/rules_as_code.md)).
+- **Included drivers:** Postgres, MySQL, Oracle, Snowflake (SQL Server: see above).
+- **No outside connections are needed**, except to your databases, to Slack if you use it, and to your AI provider only if you turn AI features on. **`LUMIDA_OFFLINE=true`** blocks even those.
+
+## 10. Without Docker (pip)
+Needs Python 3.12+ and a Postgres for Lumida's own memory. Any Postgres works: an existing server with a spare database, or the one-line `docker run` that `lumida setup` shows.
+```bash
+pip install lumida                 # or "lumida[all]" for MySQL, Oracle and Snowflake too
+lumida setup                       # asks for that Postgres, prepares it, creates your admin, writes .env
+lumida serve                       # keep it running: nightly checks and the web app
+```
+Open http://127.0.0.1:8000. Database URLs go in the same `.env`, under names you choose. Run it as a service (systemd, Windows Task Scheduler, …) so it survives restarts.
+
+## 11. AI features: your provider, your key (optional)
+Off by default. The AI only proposes rules, reviews unsure links and writes explanations; people approve, and checks never use it. It sees table and column structure and statistics, never rows.
+
+| Provider | `.env` |
+|---|---|
+| Any OpenAI-compatible service (OpenAI, OpenRouter, Groq, Mistral, Together, Azure OpenAI, …) | `LUMIDA_LLM_PROVIDER=openai`, `LUMIDA_LLM_MODEL=<model>`, `LUMIDA_LLM_API_KEY=<key>`, and `LUMIDA_LLM_BASE_URL=<the service's /v1 URL>` (empty = OpenAI) |
+| A model on your own machines (Ollama, LM Studio, vLLM): nothing leaves your network | `LUMIDA_LLM_PROVIDER=openai`, `LUMIDA_LLM_MODEL=<model>`, `LUMIDA_LLM_BASE_URL=http://host.docker.internal:11434/v1` (Ollama, from Docker) |
+| Google Gemini | `LUMIDA_LLM_PROVIDER=gemini`, `LUMIDA_LLM_API_KEY=<key>` |
+
+Restart Lumida after changing `.env`. The *Propose rules with AI* and *Explain with AI* buttons appear in the web app.

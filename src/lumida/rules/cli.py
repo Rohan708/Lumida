@@ -1,15 +1,31 @@
-"""``lumida rules ...`` (per source) and ``lumida rule ...`` (one rule) commands."""
+"""``lumida rules ...`` (per source), ``lumida rule ...`` (one rule) and ``lumida check``
+(a rules file against any database, for CI) commands."""
 
 import argparse
 import getpass
 import json
+from dataclasses import asdict
+from pathlib import Path
+
+from sqlalchemy.orm import Session
 
 from lumida.config import get_settings
 from lumida.discovery.catalog import load_catalog
-from lumida.graph.models import Rule, RuleStatus, utcnow
+from lumida.graph.models import DataSource, Rule, RuleStatus, SourceKind, utcnow
 from lumida.ingestion.cli import store_session
+from lumida.ingestion.scan import open_adapter
+from lumida.ingestion.settings import ScanSettings
 from lumida.ingestion.sources import get_source
+from lumida.rules.as_code import (
+    apply_import,
+    catalog_from_tables,
+    check_file,
+    export_rules,
+    parse_rules_file,
+    plan_import,
+)
 from lumida.rules.checks import check_rules
+from lumida.rules.settings import DEFAULT_RULE_SETTINGS
 from lumida.rules.spec import parse_spec
 from lumida.rules.store import add_user_rule, find_rule, review_rule, rules_of
 
@@ -36,6 +52,32 @@ def add_rule_parsers(subcommands: "argparse._SubParsersAction[argparse.ArgumentP
     p.add_argument("name")
     p.add_argument("rule_json", help='e.g. {"kind": "compare_constant", "table": ...}')
     p.add_argument("--by", help="author (default: OS user)")
+    p = commands.add_parser("export", help="approved rules as YAML, to keep in git (Stage 4.6)")
+    p.add_argument("name")
+    p.add_argument("-o", "--output", type=Path, help="file to write (default: print)")
+    p = commands.add_parser(
+        "import", help="load a rules file: shows the changes; --apply does them"
+    )
+    p.add_argument("name")
+    p.add_argument("file", type=Path)
+    p.add_argument("--apply", action="store_true", help="make the changes (default: only show)")
+    p.add_argument(
+        "--prune", action="store_true", help="switch off active rules missing from the file"
+    )
+    p.add_argument("--by", help="who (default: OS user)")
+
+    check = subcommands.add_parser(
+        "check", help="check a database against a rules file, for CI (exit 1 if a rule is broken)"
+    )
+    check.add_argument(
+        "--rules", type=Path, required=True, help="a file from `lumida rules export`"
+    )
+    check.add_argument("--connection-ref", required=True,
+                       help="NAME of the env var holding the database URL")  # fmt: skip
+    check.add_argument("--kind", choices=[k.value for k in SourceKind], default="postgres")
+    check.add_argument("--include-schemas", default="", help="comma-separated; default: all")
+    check.add_argument("--exclude-schemas", default="", help="comma-separated")
+    check.add_argument("--json", action="store_true", help="machine-readable output")
 
     rule = subcommands.add_parser("rule", help="show or review one rule")
     commands = rule.add_subparsers(dest="rule_command", required=True)
@@ -70,6 +112,15 @@ def run_rules_command(args: argparse.Namespace) -> int:
             for r in found:
                 print(_line(r))
             print(f"{len(found)} rules")
+        elif args.rules_command == "export":
+            text = export_rules(session, source)
+            if args.output:
+                args.output.write_text(text, encoding="utf-8")
+                print(f"wrote {args.output}")
+            else:
+                print(text, end="")
+        elif args.rules_command == "import":
+            _import(session, source, args)
         elif args.rules_command == "check":
             print(f"rules on {args.name}: {check_rules(session, source).summary()}")
         else:  # add
@@ -126,3 +177,60 @@ def _describe(r: Rule) -> str:
             for h in history
         ]
     return "\n".join(lines)
+
+
+def _import(session: Session, source: DataSource, args: argparse.Namespace) -> None:
+    _, wanted = parse_rules_file(args.file.read_text(encoding="utf-8"))
+    catalog = load_catalog(session, source)
+    plan = plan_import(session, source, catalog, wanted)
+    for line in plan.lines(prune=args.prune):
+        print(line)
+    pruned = len(plan.not_in_file) if args.prune else 0
+    print(
+        f"{plan.changes + pruned} changes, {plan.unchanged} unchanged, {len(plan.invalid)} unusable"
+    )
+    if not args.apply:
+        if plan.changes + pruned:
+            print("nothing changed yet: run again with --apply")
+        return
+    apply_import(session, source, catalog, plan, by=args.by or getpass.getuser(), now=utcnow(),
+                 prune=args.prune)  # fmt: skip
+    print("applied")
+
+
+def run_check_command(args: argparse.Namespace) -> int:
+    """`lumida check`: no metadata store needed; the structure is read from the database."""
+    _, wanted = parse_rules_file(args.rules.read_text(encoding="utf-8"))
+    settings = ScanSettings(
+        include_schemas=tuple(_split(args.include_schemas)),
+        exclude_schemas=tuple(_split(args.exclude_schemas)),
+    )
+    source = DataSource(
+        name="check",
+        kind=SourceKind(args.kind),
+        connection_ref=args.connection_ref,
+        settings=settings.model_dump(mode="json", exclude_defaults=True),
+    )
+    with open_adapter(source) as adapter:
+        catalog = catalog_from_tables(source, adapter.introspect())
+        outcomes = check_file(adapter, catalog, wanted, DEFAULT_RULE_SETTINGS.sample_size)
+    broken = [o for o in outcomes if not o.ok]
+    if args.json:
+        print(json.dumps({"ok": not broken, "rules": [asdict(o) for o in outcomes]}, indent=2))
+    else:
+        for o in outcomes:
+            if o.problem:
+                print(f"ERROR   {o.rule}: {o.problem}")
+            elif o.ok:
+                print(f"ok      {o.rule}  ({o.checked_rows:,} rows)")
+            else:
+                ids = ", ".join(json.dumps(s) for s in o.sample[:3])
+                sampled = " (sample)" if o.sampled else ""
+                print(f"BROKEN  {o.rule}: {o.violating_rows:,} of {o.checked_rows:,} rows"
+                      f"{sampled}" + (f"; e.g. {ids}" if ids else ""))  # fmt: skip
+        print(f"{len(outcomes) - len(broken)} of {len(outcomes)} rules hold")
+    return 1 if broken else 0
+
+
+def _split(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
@@ -25,7 +25,7 @@ from pydantic_settings import (
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 LogFormat = Literal["text", "json"]
 # "none" = AI features off (everything else still works). More providers plug in here.
-LLMProvider = Literal["none", "gemini"]
+LLMProvider = Literal["none", "openai", "gemini"]
 
 ENV_PREFIX = "LUMIDA_"
 LEGACY_ENV_PREFIX = "AIDE_"  # the product's working name until 2026-10-14
@@ -75,11 +75,19 @@ class Settings(BaseSettings):
     # Alerting
     slack_webhook_url: SecretStr | None = None
 
+    # Never connect anywhere except the customer's own databases: no Slack, no AI provider,
+    # whatever else is configured. For networks where nothing may leave.
+    offline: bool = False
+
     # AI-assisted discovery (Stage 2). Only proposals; checks never call the LLM.
+    # The customer's own provider, model and key. "openai" = any OpenAI-compatible service
+    # (hosted, or a model on their own machines: Ollama, LM Studio, vLLM) at llm_base_url.
     llm_provider: LLMProvider = "none"
     llm_model: str | None = None  # None = the provider's default (see reasoning/llm.py)
+    llm_api_key: SecretStr | None = None
+    llm_base_url: str | None = None  # "openai": e.g. http://localhost:11434/v1 (Ollama)
     llm_timeout_seconds: float = 120.0
-    gemini_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None  # older name for the Gemini key; still read
 
     # The self-hosted service (`lumida serve`, Stage 4.1).
     scheduler_tick_seconds: float = 60.0  # how often it checks what's due
@@ -94,6 +102,11 @@ class Settings(BaseSettings):
     session_hours: float = 12.0  # how long a login lasts
     login_max_failures: int = 5  # wrong passwords in a row before the account is locked
     login_lockout_minutes: float = 15.0
+
+    @property
+    def ai_enabled(self) -> bool:
+        """Whether to offer AI features (a provider is set and offline mode is off)."""
+        return self.llm_provider != "none" and not self.offline
 
     @classmethod
     def settings_customise_sources(
@@ -113,3 +126,12 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Process-wide settings. Tests should construct ``Settings()`` directly instead."""
     return Settings()
+
+
+def is_offline() -> bool:
+    """Offline mode, also where full settings can't load (e.g. a test without a store)."""
+    try:
+        return get_settings().offline
+    except ValidationError:
+        value = os.environ.get("LUMIDA_OFFLINE") or os.environ.get("AIDE_OFFLINE") or ""
+        return value.strip().lower() in {"1", "true", "yes", "on"}

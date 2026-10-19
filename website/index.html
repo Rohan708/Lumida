@@ -29,6 +29,7 @@
         <a href="#finds">What it finds</a>
         <a href="#security">Security</a>
         <a href="#run">Install</a>
+        <a href="https://github.com/Rohan708/Lumida" rel="noopener">GitHub</a>
         <a class="btn btn--light btn--small" href="#early-access">Get early access</a>
       </nav>
     </div>
@@ -39,14 +40,14 @@
     <section class="hero">
       <div class="glow" aria-hidden="true"></div>
       <div class="wrap hero__inner">
-        <p class="pill"><span class="pill__dot"></span>Early preview · looking for design partners</p>
+        <p class="pill"><span class="pill__dot"></span>Open source · early preview · looking for design partners</p>
         <h1>Light on your data.</h1>
         <p class="lede">Connect Lumida read-only to your databases. It finds the relationships nobody documented, learns what normal looks like, and tells you every morning what's wrong, what it breaks, and why, with the evidence.</p>
         <div class="hero__actions">
           <a class="btn btn--light" href="#early-access">Get early access <span aria-hidden="true">↗</span></a>
           <a class="btn btn--ghost" href="#how">See how it works</a>
         </div>
-        <p class="hero__note"><span class="check" aria-hidden="true"></span>Read-only login · runs inside your network · no row values leave unless you opt in</p>
+        <p class="hero__note"><span class="check" aria-hidden="true"></span>Read-only · runs on your machines · open source (Apache 2.0) · nothing is sent to us</p>
 
         <figure class="console reveal" aria-label="Example: a nightly run on Lumida's test database finds near-duplicate customers">
           <div class="console__bar">
@@ -261,7 +262,7 @@ check: duplicate_values   evidence: counted inside the database</code></pre>
             <p class="eyebrow">Security &amp; privacy</p>
             <h2 class="reveal">Your data stays inside your network.</h2>
           </div>
-          <p class="section__aside">Lumida is self-hosted: a container next to your database, with its own small Postgres for what it learns.</p>
+          <p class="section__aside">Lumida runs on your machines, with its own small Postgres for what it learns. No account, no telemetry. And it's <a href="https://github.com/Rohan708/Lumida" rel="noopener">open source</a>: your security team can read every line.</p>
         </div>
         <div class="cards cards--2">
           <article class="card card--row reveal">
@@ -290,7 +291,8 @@ check: duplicate_values   evidence: counted inside the database</code></pre>
         <div class="split__copy">
           <p class="eyebrow">Install</p>
           <h2 class="reveal">Running in minutes.</h2>
-          <p>One <code>docker compose up</code>. Add a database in the browser, test the connection, press Run now. From then on it runs by itself every night, at the time you choose.</p>
+          <p>On a server, one <code>docker compose up</code>. On a laptop, <code>pip install lumida</code>, then <code>lumida setup</code> and <code>lumida serve</code>. Add a database in the browser, test the connection, press Run now. From then on it runs by itself every night, at the time you choose.</p>
+          <p class="muted-note">No account, no sign-up, no telemetry. It runs on your machines and talks only to your databases.</p>
         </div>
         <div class="terminal reveal" aria-label="Example terminal output">
           <div class="terminal__bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="label">terminal</span></div>
@@ -328,12 +330,16 @@ $ lumida run shop
         <img class="cta__mark" src="assets/mark.svg" alt="" width="60" height="60">
         <h2>Find out what your database is hiding.</h2>
         <p>We're looking for a few teams with a messy Postgres, MySQL or SQL Server behind their app to use Lumida first, free during the beta.</p>
-        <form class="signup" id="signup" novalidate>
+        <!-- Netlify Forms collects these when the site is hosted on Netlify (no backend). -->
+        <form class="signup" id="signup" name="early-access" method="POST" data-netlify="true" netlify-honeypot="company_url" novalidate>
+          <input type="hidden" name="form-name" value="early-access">
+          <p class="visually-hidden"><label>Leave this empty: <input name="company_url" tabindex="-1" autocomplete="off"></label></p>
           <label class="visually-hidden" for="email">Work email</label>
           <input id="email" name="email" type="email" placeholder="you@company.com" autocomplete="email" required>
           <button class="btn btn--light" type="submit">Request early access</button>
         </form>
         <p class="signup__msg" id="signup-msg" aria-live="polite"></p>
+        <p class="cta__alt">Or try it now: <code>pip install lumida</code> · <a href="https://github.com/Rohan708/Lumida/blob/main/docs/setup/install.md" rel="noopener">install guide</a></p>
       </div>
     </section>
   </main>
@@ -348,8 +354,10 @@ $ lumida run shop
         <a href="#how">How it works</a>
         <a href="#finds">What it finds</a>
         <a href="#security">Security</a>
+        <a href="https://github.com/Rohan708/Lumida/blob/main/docs/setup/install.md" rel="noopener">Install guide</a>
+        <a href="https://github.com/Rohan708/Lumida" rel="noopener">GitHub</a>
       </nav>
-      <p class="footer__copy">© <span id="year">2026</span> Lumida · Light on your data</p>
+      <p class="footer__copy">© <span id="year">2026</span> Lumida · open source, Apache 2.0</p>
     </div>
   </footer>
 

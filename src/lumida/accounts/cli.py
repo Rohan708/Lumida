@@ -60,7 +60,7 @@ def run_user_command(args: argparse.Namespace) -> int:
         if args.user_command == "add":
             user = create_user(
                 session, tenant_id=tenant.id, email=args.email, name=args.name,
-                role=Role(args.role), password=_read_password(args.password_stdin), by=by,
+                role=Role(args.role), password=read_password(args.password_stdin), by=by,
             )  # fmt: skip
             print(f"created {user.email} ({user.role.value})")
         elif args.user_command == "list":
@@ -77,12 +77,12 @@ def run_user_command(args: argparse.Namespace) -> int:
                 set_disabled(session, user, args.user_command == "disable", by=by)
                 print(f"{user.email} {args.user_command}d")
             else:
-                set_password(session, user, _read_password(args.password_stdin), by=by)
+                set_password(session, user, read_password(args.password_stdin), by=by)
                 print(f"new password set for {user.email}; their sessions were ended")
     return 0
 
 
-def _read_password(from_stdin: bool) -> str:
+def read_password(from_stdin: bool) -> str:
     if from_stdin:
         password = sys.stdin.readline().rstrip("\r\n")
         check_password_rules(password)

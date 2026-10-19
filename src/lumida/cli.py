@@ -58,7 +58,13 @@ from lumida.pipeline_cli import (
 from lumida.reasoning.llm import LLMError
 from lumida.reconcile.cli import add_reconcile_parser, run_reconcile_command
 from lumida.reconcile.run import PairConfigError, PairNotFoundError
-from lumida.rules.cli import add_rule_parsers, run_rule_command, run_rules_command
+from lumida.rules.as_code import RulesFileError
+from lumida.rules.cli import (
+    add_rule_parsers,
+    run_check_command,
+    run_rule_command,
+    run_rules_command,
+)
 from lumida.rules.store import InvalidRuleError
 from lumida.semantic.cli import add_semantic_parser, run_pii_command
 from lumida.service.cli import (
@@ -67,9 +73,12 @@ from lumida.service.cli import (
     run_migrate_command,
     run_serve_command,
 )
+from lumida.service.setup import add_setup_parser, run_setup_command
 
 # Mistakes a user can make: reported as one line, not a traceback.
 USER_ERRORS = (
+    RulesFileError,
+    FileNotFoundError,
     AccountError,
     WeakPasswordError,
     SourceExistsError,
@@ -149,6 +158,8 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "migrate": run_migrate_command,
     "api": run_api_command,
     "user": run_user_command,
+    "check": run_check_command,
+    "setup": run_setup_command,
     "lab": _run_lab,
 }
 
@@ -167,6 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     add_context_parsers(subcommands)
     add_service_parsers(subcommands)
     add_user_parsers(subcommands)
+    add_setup_parser(subcommands)
     _add_lab_parser(subcommands)
 
     args = parser.parse_args(argv)

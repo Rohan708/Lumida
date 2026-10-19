@@ -6,6 +6,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from lumida.config import is_offline
 from lumida.graph.models import DataSource
 from lumida.ingestion.connections import resolve_connection_url
 
@@ -56,7 +57,8 @@ def slack_text(message: AlertMessage) -> str:
 
 
 def notifier_for(source: DataSource) -> Notifier:
-    """Slack if the source names a webhook variable, otherwise the console."""
-    if source.alert_webhook_ref:
+    """Slack if the source names a webhook variable, otherwise the console. In offline
+    mode (``LUMIDA_OFFLINE``) always the console: nothing leaves the network."""
+    if source.alert_webhook_ref and not is_offline():
         return SlackNotifier(resolve_connection_url(source.alert_webhook_ref))
     return ConsoleNotifier()

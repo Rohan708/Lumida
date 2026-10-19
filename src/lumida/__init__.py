@@ -1,3 +1,4 @@
-"""Lumida: audits Snowflake + dbt warehouses and proposes human-approved fixes."""
+"""Lumida: points read-only at your databases, learns what normal looks like, and tells you
+what's wrong, what it breaks and why, with evidence. Runs entirely on your own machines."""
 
-__version__ = "0.0.1"
+__version__ = "0.4.0"

@@ -1,6 +1,6 @@
 # Lumida website
 
-The product's landing page: plain HTML, CSS and JavaScript, with no build step and no dependencies. Fonts load from Google Fonts; the page still looks right without them, using system fonts. The design follows the "Luminous Void" direction from Stitch (2026-10-18), rebuilt by hand.
+The public landing page (what Lumida is, how to install it, early-access sign-up): plain HTML, CSS and JavaScript, with no build step and no dependencies. The Lumida *app* is different: it runs on each customer's own machines. Fonts load from Google Fonts; the page still looks right without them, using system fonts. The design follows the "Luminous Void" direction from Stitch (2026-10-18), rebuilt by hand.
 
 | File | What it is |
 |---|---|
@@ -17,16 +17,23 @@ python -m http.server 8765 --directory website
 ```
 Then open http://localhost:8765.
 
-## Before going live
-- **Sign-up form:** set `EARLY_ACCESS_ENDPOINT` in `main.js` to a form service (e.g. Netlify Forms or Formspree) or your own API. Until then the form says, honestly, that sign-ups aren't open yet.
-- **Claims:** every number on the page comes from the test lab and says so (15/15 relationships, 13/13 planted problems, 12 of 13 rules, 0 false alarms on quiet nights). Keep it that way. Don't add:
-  - compliance claims (SOC 2, HIPAA, …) before they're true
-  - a company name ("Inc.") before one exists
-  - integrations that aren't built (only Slack is)
-  - demo, docs or pricing links before those pages exist
-- **Fonts:** to load nothing from other sites, download Geist and JetBrains Mono (both under the open font licence), put them in `assets/fonts/`, and replace the Google Fonts link with `@font-face` rules.
-- **Hosting:** any static host works. The simplest are Netlify or Cloudflare Pages: connect the repo and set the publish directory to `website`.
-- **Domain:** check availability of `lumida.dev` / `lumida.io` / `getlumida.com` before printing it anywhere.
+## Going live (Netlify, free)
+`netlify.toml` at the repository root has everything needed: it publishes `website/` with no build step, and sets the security headers.
+1. Sign up at https://netlify.com with GitHub, then *Add new site → Import an existing project → GitHub → Rohan708/Lumida*. The settings come from `netlify.toml`, so just press **Deploy**.
+2. The site is live at `https://<name>.netlify.app`, and every push to `main` updates it.
+3. **Sign-ups:** in Netlify, go to *Site configuration → Forms → Enable form detection*, then redeploy. "Request early access" emails then appear under **Forms → early-access**; you can get an email per sign-up under *Form notifications*. A hidden honeypot field keeps most spam out.
+4. **Domain (optional):** buy one (check `lumida.dev`, `lumida.io` or `getlumida.com`), then *Domain management → Add a domain*. Netlify sets up HTTPS by itself.
+
+Previewed locally, the form doesn't collect anything; it says so.
+
+## Keeping it honest
+Every number on the page comes from the test lab and says so (15/15 relationships, 13/13 planted problems, 12 of 13 rules, 0 false alarms on quiet nights). Don't add:
+- compliance claims (SOC 2, HIPAA, …) before they're true
+- a company name ("Inc.") before one exists
+- integrations that aren't built (only Slack is)
+- demo, docs or pricing links before those pages exist
+
+Fonts load from Google Fonts. To load nothing from other sites, put Geist and JetBrains Mono (both under the open font licence) in `assets/fonts/` and replace the link with `@font-face` rules.
 
 ## Brand
 - **Colours:**
