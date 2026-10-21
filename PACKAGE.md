@@ -13,10 +13,12 @@ Requires Python 3.12+.
 
 ## Start
 ```bash
-lumida setup     # where Lumida keeps what it learns (any Postgres), and your admin account
-lumida serve     # runs Lumida: the nightly checks, and the web app
+lumida serve
 ```
-Open **http://127.0.0.1:8000**, log in, and go to *Databases → Add a database*. It shows a script for the read-only login and tests the connection; then press *Run now*.
+Open **http://127.0.0.1:8000**. The first time, the browser walks you through setup, using the one-time code printed in the terminal:
+1. **Where Lumida keeps what it learns:** "Start one for me" (a private Postgres via Docker) or a Postgres you already have.
+2. **Your admin account.**
+3. **Databases → Add a database:** a script for the read-only login, a connection test, then *Run now*.
 
 Connection URLs stay in `.env` on your machine, under a name you choose:
 ```

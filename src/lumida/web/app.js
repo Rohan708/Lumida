@@ -747,12 +747,173 @@ async function mePage() {
       passwordForm));
 }
 
+// --- first-run setup (0.4.1) -------------------------------------------------------------
+// Shown before anything else while Lumida's memory or its first admin is missing. Every
+// step sends the one-time setup code printed where Lumida was started.
+
+let setupDone = false;
+let setupCode = "";
+
+async function setupStatus() {
+  try {
+    const response = await fetch("/api/setup/status", { credentials: "same-origin" });
+    return response.ok ? await response.json() : { ready: true };
+  } catch {
+    return { ready: false, starting: true }; // Lumida is restarting after setup
+  }
+}
+
+async function setupCall(path, body) {
+  const response = await fetch(`/api/setup${path}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Lumida-Setup-Code": setupCode },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail
+      : Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join("; ") : response.statusText;
+    throw new ApiError(response.status, detail);
+  }
+  return data;
+}
+
+function setupShell(step, ...content) {
+  frame();
+  const steps = [["memory", "Lumida's memory"], ["admin", "Your admin account"], ["done", "Start"]];
+  return show(h("div", { class: "setup" },
+    h("div", { class: "brand" }, h("img", { src: "mark.svg", alt: "", width: 34, height: 34 }), "lumida"),
+    h("h1", {}, "Set up Lumida"),
+    h("p", { class: "muted" }, "Everything stays on this machine. Nothing is sent to Lumida's makers."),
+    h("ol", { class: "setup__steps" }, steps.map(([key, label]) =>
+      h("li", { class: key === step ? "on" : "" }, label))),
+    ...content));
+}
+
+function codeField() {
+  const input = h("input", { id: "setup-code", value: setupCode, placeholder: "1234-5678", autocomplete: "off",
+    oninput: (e) => { setupCode = e.target.value.trim(); } });
+  return h("div", { class: "field" }, h("label", { for: "setup-code" }, "Setup code"), input,
+    h("div", { class: "muted small" }, "Printed where Lumida was started (the terminal, or docker compose logs lumida)."));
+}
+
+async function setupPage(status) {
+  if (status.starting || (status.setup_mode && !status.needs_memory && !status.needs_admin)) {
+    setupShell("done", h("div", { class: "card stack" }, h("h2", {}, "Starting Lumida…"),
+      h("p", { class: "muted" }, "This takes a few seconds. The page continues by itself.")));
+    setTimeout(route, 1500);
+    return;
+  }
+  if (status.needs_memory) return memoryStep(status);
+  return adminStep();
+}
+
+function memoryStep(status) {
+  const error = h("p", { class: "bad small", role: "alert" });
+  const result = h("p", { class: "small" });
+  const field = (id, label, input) => h("div", { class: "field" }, h("label", { for: id }, label), input);
+  const host = h("input", { id: "pg-host", value: "localhost" });
+  const port = h("input", { id: "pg-port", value: "5432", inputmode: "numeric" });
+  const database = h("input", { id: "pg-db", value: "lumida" });
+  const user = h("input", { id: "pg-user", value: "postgres" });
+  const password = h("input", { id: "pg-password", type: "password", autocomplete: "off" });
+  const existing = () => ({ host: host.value.trim(), port: Number(port.value), database: database.value.trim(),
+    user: user.value.trim(), password: password.value });
+  const fields = h("div", { class: "setup__fields", hidden: true },
+    h("div", { class: "row" }, field("pg-host", "Host", host), field("pg-port", "Port", port)),
+    h("div", { class: "row" }, field("pg-db", "Database (created if missing)", database), field("pg-user", "User", user)),
+    field("pg-password", "Password", password));
+
+  const option = (value, title, hint, disabled = false) => h("label", { class: `choice${disabled ? " choice--off" : ""}` },
+    h("input", { type: "radio", name: "memory", value, disabled, onchange: () => { fields.hidden = value !== "existing"; result.textContent = ""; } }),
+    h("span", {}, h("strong", {}, title), h("span", { class: "muted small" }, hint)));
+  const dockerHint = status.docker ? "Recommended. Lumida starts a private Postgres in Docker (about 20 seconds)."
+    : "Needs Docker, which isn't running on this machine. Start Docker Desktop and reload, or use a Postgres you have.";
+  const choices = h("div", { class: "stack" },
+    option("docker", "Start one for me", dockerHint, !status.docker),
+    option("existing", "Use a Postgres I already have", "Any Postgres you can reach, e.g. a spare database on an existing server."),
+    option("none", "Without a separate database", "Coming in a later version.", true));
+  const chosen = () => (choices.querySelector("input[name=memory]:checked") || {}).value;
+
+  const test = h("button", { class: "btn", type: "button", onclick: async () => {
+    error.textContent = ""; result.textContent = "Testing…"; test.disabled = true;
+    try {
+      const found = await setupCall("/memory/test", existing());
+      result.className = `small ${found.ok ? "good" : "bad"}`;
+      result.textContent = found.message;
+    } catch (err) { result.textContent = ""; error.textContent = err.message; }
+    finally { test.disabled = false; }
+  } }, "Test connection");
+  fields.append(h("div", { class: "row" }, test), result);
+
+  const go = h("button", { class: "btn btn--amber", type: "submit" }, "Continue");
+  const form = h("form", { class: "card stack", onsubmit: async (event) => {
+    event.preventDefault();
+    error.textContent = "";
+    const mode = chosen();
+    if (!mode) { error.textContent = "Choose where Lumida keeps what it learns."; return; }
+    go.disabled = true;
+    go.textContent = mode === "docker" ? "Starting Postgres… (about 20 s)" : "Preparing…";
+    try {
+      const next = await setupCall("/memory", mode === "docker" ? { mode } : { mode, existing: existing() });
+      setupPage(next);
+    } catch (err) {
+      error.textContent = err.message;
+      go.disabled = false; go.textContent = "Continue";
+    }
+  } },
+    codeField(),
+    h("h2", {}, "Where should Lumida keep what it learns?"),
+    h("p", { class: "muted small" }, "Lumida remembers each table's measurements over time, the problems it found and your decisions. It needs a small Postgres of its own; it never writes to the databases it watches."),
+    choices, fields, error, go);
+  setupShell("memory", form);
+}
+
+function adminStep() {
+  const error = h("p", { class: "bad small", role: "alert" });
+  const field = (id, label, input) => h("div", { class: "field" }, h("label", { for: id }, label), input);
+  const name = h("input", { id: "admin-name", autocomplete: "name" });
+  const email = h("input", { id: "admin-email", type: "email", required: true, autocomplete: "username" });
+  const password = h("input", { id: "admin-password", type: "password", minlength: 12, required: true, autocomplete: "new-password" });
+  const again = h("input", { id: "admin-again", type: "password", minlength: 12, required: true, autocomplete: "new-password" });
+  const go = h("button", { class: "btn btn--amber", type: "submit" }, "Create admin");
+  const form = h("form", { class: "card stack", onsubmit: async (event) => {
+    event.preventDefault();
+    error.textContent = "";
+    if (password.value !== again.value) { error.textContent = "The two passwords differ."; return; }
+    go.disabled = true;
+    try {
+      const next = await setupCall("/admin", { name: name.value, email: email.value, password: password.value });
+      toast("Admin created. Log in with it.");
+      setupCode = "";
+      if (next.ready) { setupDone = true; location.hash = "#/login"; return route(); }
+      setupPage({ ...next, starting: true });
+    } catch (err) {
+      error.textContent = err.message;
+      go.disabled = false;
+    }
+  } },
+    codeField(),
+    h("h2", {}, "Your admin account"),
+    h("p", { class: "muted small" }, "The first person who can log in. Admins add colleagues later under People."),
+    field("admin-name", "Name", name), field("admin-email", "Email", email),
+    field("admin-password", "Password (12+ characters)", password), field("admin-again", "Password again", again),
+    error, go);
+  setupShell("admin", form);
+}
+
 // --- routing ---------------------------------------------------------------------------
 
 async function route() {
   const [path, search = ""] = location.hash.replace(/^#/, "").split("?");
   const query = new URLSearchParams(search);
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  if (!setupDone) {
+    const status = await setupStatus();
+    if (!status.ready) return setupPage(status);
+    setupDone = true;
+  }
   if (parts[0] === "login") return loginPage();
   if (!me) {
     try {

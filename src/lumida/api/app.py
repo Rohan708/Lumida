@@ -23,13 +23,14 @@ from sqlalchemy import Engine
 from lumida import __version__
 from lumida.accounts.passwords import WeakPasswordError
 from lumida.accounts.store import AccountError, AccountNotFoundError, AuthPolicy
-from lumida.api import account_routes, onboarding_routes, routes
+from lumida.api import account_routes, onboarding_routes, routes, setup_routes
 from lumida.api.views import NotFoundError
 from lumida.context.questions import AnswerError
 from lumida.context.store import ContextError
 from lumida.detection.recording import InvalidTransitionError
 from lumida.ingestion.sources import SourceExistsError, SourceNotFoundError
 from lumida.rules.store import InvalidRuleError
+from lumida.service.first_run import SetupState
 
 log = logging.getLogger("lumida.api")
 
@@ -55,7 +56,11 @@ WEB_CSP = (
 
 
 def create_app(
-    engine: Engine, policy: AuthPolicy | None = None, *, ai_enabled: bool = False
+    engine: Engine,
+    policy: AuthPolicy | None = None,
+    *,
+    ai_enabled: bool = False,
+    setup: SetupState | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Lumida API",
@@ -67,6 +72,9 @@ def create_app(
     app.state.engine = engine
     app.state.policy = policy or AuthPolicy()
     app.state.ai_enabled = ai_enabled  # whether to offer "propose rules" / "explain"
+    # First admin from the browser, while nobody can log in yet (0.4.1).
+    app.state.setup = setup or SetupState(code=None, engine=engine)
+    app.include_router(setup_routes.router)
     app.include_router(account_routes.router)
     app.include_router(routes.router)
     app.include_router(onboarding_routes.router)
@@ -112,6 +120,19 @@ def _validation(exc: ValidationError) -> str:
         f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" if e["loc"] else e["msg"]
         for e in exc.errors(include_url=False, include_input=False)
     )
+
+
+def create_setup_app(state: SetupState) -> FastAPI:
+    """Setup mode: ``lumida serve`` before Lumida's memory exists. Only the setup steps and
+    the web app's files; it's replaced by the normal app once setup is done."""
+    app = FastAPI(title="Lumida setup", version=__version__, docs_url=None, redoc_url=None,
+                  openapi_url=None)  # fmt: skip
+    app.state.setup = state
+    app.state.setup_mode = True
+    app.include_router(setup_routes.router)
+    app.middleware("http")(_security_headers)
+    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+    return app
 
 
 def api_server(app: FastAPI, host: str, port: int) -> uvicorn.Server:

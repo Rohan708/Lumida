@@ -4,7 +4,10 @@
 import argparse
 import threading
 
+from pydantic import ValidationError
+
 from lumida.config import get_settings
+from lumida.service.first_run import missing_memory, run_setup_mode
 from lumida.service.migrate import upgrade_to_head
 from lumida.service.serve import (
     auth_policy,
@@ -28,7 +31,16 @@ def add_service_parsers(subcommands: "argparse._SubParsersAction[argparse.Argume
 
 
 def run_serve_command(args: argparse.Namespace) -> int:
-    settings = get_settings()
+    try:
+        settings = get_settings()
+    except ValidationError as exc:
+        if args.once or not missing_memory(exc):
+            raise
+        # First start: finish setup in the browser (Lumida's memory, the first admin).
+        if not run_setup_mode():
+            return 1
+        get_settings.cache_clear()
+        settings = get_settings()
     configure_logging(settings)
     stop = threading.Event()
     install_signal_handlers(stop)

@@ -82,6 +82,10 @@ def test_the_endpoints(client: TestClient) -> None:
         ("PATCH", "/api/v1/sources/{name}"),
         ("DELETE", "/api/v1/sources/{name}"),
         ("GET", "/api/v1/sources/{name}/rules/export"),
+        ("GET", "/api/setup/status"),
+        ("POST", "/api/setup/memory/test"),
+        ("POST", "/api/setup/memory"),
+        ("POST", "/api/setup/admin"),
     }
     assert client.get("/api/docs").status_code == 200
 

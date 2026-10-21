@@ -157,8 +157,13 @@ def _start_api(settings: Settings, engine: Engine) -> "uvicorn.Server | None":
         log.info("API off (LUMIDA_API_ENABLED=false)")
         return None
     from lumida.api.app import api_server, create_app, start_api_thread
+    from lumida.service.first_run import SetupState, admin_exists, new_setup_code
 
-    app = create_app(engine, auth_policy(settings), ai_enabled=settings.ai_enabled)
+    setup = SetupState(code=None, engine=engine)
+    if not admin_exists(engine):  # nobody can log in yet: the browser creates the first admin
+        setup.code = new_setup_code()
+        log.warning("no admin yet: open the web app to create one. Setup code: %s", setup.code)
+    app = create_app(engine, auth_policy(settings), ai_enabled=settings.ai_enabled, setup=setup)
     server = api_server(app, settings.api_host, settings.api_port)
     start_api_thread(server)
     shown = "127.0.0.1" if settings.api_host == "0.0.0.0" else settings.api_host  # noqa: S104

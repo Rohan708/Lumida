@@ -7,7 +7,7 @@ There are two ways to install it. Neither needs the source code.
 | | Best for | Commands |
 |---|---|---|
 | **Docker** (below) | a server that runs 24/7; brings its own Postgres | `docker compose up -d` |
-| **pip** ([section 10](#10-without-docker-pip)) | trying it on a laptop, CI, teams without Docker; bring your own Postgres | `pip install lumida` → `lumida setup` → `lumida serve` |
+| **pip** ([section 10](#10-without-docker-pip)) | trying it on a laptop, CI, teams without Docker | `pip install lumida` → `lumida serve` → the browser does the rest |
 
 ## 1. Requirements
 - Docker with Compose (Docker Desktop, or Docker Engine + the compose plugin)
@@ -66,11 +66,11 @@ docker compose exec lumida lumida source alerts shop --webhook-ref SLACK_DATA_AL
 The health endpoint answers **200** while the scheduler is alive, with each database's last and next run. A database that fails doesn't make the service unhealthy; that's alerted instead. To reach `/healthz` from a monitoring tool, set `LUMIDA_HEALTH_HOST=0.0.0.0` and publish port 8080.
 
 ## 6. People, the web app and the API
-Lumida has an HTTP API (the web app will use it, and so can your scripts). People log in as themselves. Create the **first admin** in the container; the password goes in at a hidden prompt:
+Open the **web app at http://127.0.0.1:8000/**. The first time, it asks you to create the **first admin**, using the one-time setup code from the log:
 ```bash
-docker compose exec -it lumida lumida user add you@company.com --role admin
+docker compose logs lumida | findstr "Setup code"        # macOS/Linux: | grep "Setup code"
 ```
-Then open the **web app at http://127.0.0.1:8000/** and log in. Admins add colleagues under *People* (or with `lumida user add`). The API's interactive docs are at http://127.0.0.1:8000/api/docs.
+(Or in the terminal: `docker compose exec -it lumida lumida user add you@company.com --role admin`.) Then log in. Admins add colleagues under *People* (or with `lumida user add`). The API's interactive docs are at http://127.0.0.1:8000/api/docs.
 
 | Role | May |
 |---|---|
@@ -113,13 +113,16 @@ docker compose down -v     # also deletes everything Lumida learned
 - **No outside connections are needed**, except to your databases, to Slack if you use it, and to your AI provider only if you turn AI features on. **`LUMIDA_OFFLINE=true`** blocks even those.
 
 ## 10. Without Docker (pip)
-Needs Python 3.12+ and a Postgres for Lumida's own memory. Any Postgres works: an existing server with a spare database, or the one-line `docker run` that `lumida setup` shows.
+Needs Python 3.12+.
 ```bash
 pip install lumida                 # or "lumida[all]" for MySQL, Oracle and Snowflake too
-lumida setup                       # asks for that Postgres, prepares it, creates your admin, writes .env
 lumida serve                       # keep it running: nightly checks and the web app
 ```
-Open http://127.0.0.1:8000. Database URLs go in the same `.env`, under names you choose. Run it as a service (systemd, Windows Task Scheduler, …) so it survives restarts.
+Open http://127.0.0.1:8000. The first time, the browser sets Lumida up, using the one-time code printed in the terminal:
+- **Where Lumida keeps what it learns:** *Start one for me* (a private Postgres in Docker, if Docker is running) or *a Postgres I already have* (host, port, user, password; a missing database is created).
+- **Your admin account.**
+
+Settings are saved in `.env` in the folder you ran `lumida serve` from. Database URLs go in the same `.env`, under names you choose. Setup is only reachable from the same machine; on a remote server, open an SSH tunnel (`ssh -L 8000:127.0.0.1:8000 server`). For scripted installs: `lumida setup --database-url … --admin-email … --password-stdin`. Run it as a service (systemd, Windows Task Scheduler, …) so it survives restarts.
 
 ## 11. AI features: your provider, your key (optional)
 Off by default. The AI only proposes rules, reviews unsure links and writes explanations; people approve, and checks never use it. It sees table and column structure and statistics, never rows.
